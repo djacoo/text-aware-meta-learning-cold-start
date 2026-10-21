@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Data, embeddings, results
+data/
+checkpoints/
+runs/
+wandb/
+outputs/
+*.pt
+*.pth
+*.npy
+*.npz
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Planning notes
+notes/
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+
+# LaTeX build
+*.aux
+*.log
+*.out
+*.synctex.gz
+*.bbl
+*.blg

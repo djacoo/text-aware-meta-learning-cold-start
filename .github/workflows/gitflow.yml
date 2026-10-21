@@ -1,0 +1,26 @@
+name: Gitflow
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  gitflow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check source and target branch
+        env:
+          HEAD: ${{ github.head_ref }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          name='[a-z0-9]+([.-][a-z0-9]+)*'
+          case "$BASE" in
+            develop) allowed="^(feature/$name|release/$name|hotfix/$name|main)$" ;;
+            main)    allowed="^(release/$name|hotfix/$name)$" ;;
+            *)       echo "::error::PRs can only target develop or main, not '$BASE'."; exit 1 ;;
+          esac
+          if ! echo "$HEAD" | grep -Eq "$allowed"; then
+            echo "::error::'$HEAD' cannot be merged into '$BASE'."
+            exit 1
+          fi
+          echo "OK: $HEAD -> $BASE"
