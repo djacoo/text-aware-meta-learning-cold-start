@@ -37,6 +37,3 @@ notes/
 *.synctex.gz
 *.bbl
 *.blg
-
-# Original MeLU data folder
-src/MeLU-code/movielens/
