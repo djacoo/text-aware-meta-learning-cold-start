@@ -8,7 +8,7 @@ import pickle
 from tqdm import tqdm
 
 from options import states
-from dataset import movielens_1m
+from dataset import movielens_1m, download_dataset
 
 
 def item_converting(row, rate_list, genre_list, director_list, actor_list):
@@ -45,7 +45,9 @@ def load_list(fname):
 
 
 def generate(master_path):
-    dataset_path = "movielens/ml-1m"
+    # download dataset if not already there and return the file path of it
+    dataset_path = download_dataset("data/ml-1m")
+
     rate_list = load_list("{}/m_rate.txt".format(dataset_path))
     genre_list = load_list("{}/m_genre.txt".format(dataset_path))
     actor_list = load_list("{}/m_actor.txt".format(dataset_path))
@@ -61,7 +63,7 @@ def generate(master_path):
     if not os.path.exists("{}/log/".format(master_path)):
         os.mkdir("{}/log/".format(master_path))
 
-    dataset = movielens_1m()
+    dataset = movielens_1m(dataset_path)
 
     # hashmap for item information
     if not os.path.exists("{}/m_movie_dict.pkl".format(master_path)):
@@ -134,3 +136,5 @@ def generate(master_path):
                 for m_id in tmp_x[indices[-10:]]:
                     f.write("{}\t{}\n".format(u_id, m_id))
             idx += 1
+
+    return dataset_path

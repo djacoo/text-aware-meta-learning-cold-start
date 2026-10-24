@@ -33,38 +33,38 @@ if __name__ == "__main__":
     if not os.path.exists("{}/".format(master_path)):
         os.mkdir("{}/".format(master_path))
         # preparing dataset. It needs about 22GB of your hard disk space.
-        generate(master_path)
+        dataset_path = generate(master_path)
 
     # Training or loading the model
     melu = MeLU(config)
-    model_filename = "{}/models.pkl".format(master_path)
-    if not os.path.exists(model_filename):
-        total_dataset = load_dataset_from_state(master_path, "warm_state")
-        training(
-            melu, 
-            total_dataset, 
-            batch_size=config['batch_size'], 
-            num_epoch=config['num_epoch'], 
-            model_save=True, 
-            model_filename=model_filename
-        )
-    else:
-        trained_state_dict = torch.load(model_filename)
-        melu.load_state_dict(trained_state_dict)
-        if config['use_cuda']:
-            melu.cuda()
-
-    # Evaluating on 3 cold-start scenarios
-    test_states = ["user_cold_state", "item_cold_state", "user_and_item_cold_state"]
-    print("\n--- Evaluation Results ---")
-    for state in test_states:
-        test_dataset = load_dataset_from_state(master_path, state)
-        mae, rmse = evaluate(melu, test_dataset, num_local_update=config['inner'])
-        print(f"[{state}] MAE: {mae:.4f} | RMSE: {rmse:.4f}")
-
-    print("\n")
-
-    # 3. Selecting evidence candidates
-    evidence_candidate_list = selection(melu, master_path, config['num_candidate'])
-    for movie, score in evidence_candidate_list:
-        print(movie, score)
+    #  model_filename = "{}/models.pkl".format(master_path)
+    #  if not os.path.exists(model_filename):
+    #      total_dataset = load_dataset_from_state(master_path, "warm_state")
+    #      training(
+    #          melu, 
+    #          total_dataset, 
+    #          batch_size=config['batch_size'], 
+    #          num_epoch=config['num_epoch'], 
+    #          model_save=True, 
+    #          model_filename=model_filename
+    #      )
+    #  else:
+    #      trained_state_dict = torch.load(model_filename)
+    #      melu.load_state_dict(trained_state_dict)
+    #      if config['use_cuda']:
+    #          melu.cuda()
+#  
+    #  # Evaluating on 3 cold-start scenarios
+    #  test_states = ["user_cold_state", "item_cold_state", "user_and_item_cold_state"]
+    #  print("\n--- Evaluation Results ---")
+    #  for state in test_states:
+    #      test_dataset = load_dataset_from_state(master_path, state)
+    #      mae, rmse = evaluate(melu, test_dataset, num_local_update=config['inner'])
+    #      print(f"[{state}] MAE: {mae:.4f} | RMSE: {rmse:.4f}")
+#  
+    #  print("\n")
+#  
+    #  # 3. Selecting evidence candidates
+    #  evidence_candidate_list = selection(melu, master_path, config['num_candidate'], dataset_path)
+    #  for movie, score in evidence_candidate_list:
+    #      print(movie, score)
