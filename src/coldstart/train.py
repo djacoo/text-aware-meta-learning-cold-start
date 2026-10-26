@@ -6,9 +6,9 @@ import numpy as np
 import torch
 import yaml
 
-from coldstart.data import load_movielens, load_tasks
 from coldstart.evaluate import evaluate
 from coldstart.model import MeLU, meta_step
+from coldstart.preprocess import load_movielens, load_tasks
 
 
 def set_seed(seed):

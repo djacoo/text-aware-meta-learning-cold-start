@@ -3,9 +3,9 @@ import argparse
 import numpy as np
 import torch
 
-from coldstart.data import load_movielens, load_tasks
 from coldstart.metrics import mae, ndcg_at_k
 from coldstart.model import MeLU, adapt, predict
+from coldstart.preprocess import load_movielens, load_tasks
 
 TEST_STATES = ("warm_test", "user_cold", "item_cold", "user_item_cold")
 METRICS = ("mae", "ndcg@1", "ndcg@3")
