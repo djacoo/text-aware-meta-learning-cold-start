@@ -1,32 +1,35 @@
-import os
-import zipfile
 import urllib.request
+from pathlib import Path
 
-MOVIELENS_URL = "https://files.grouplens.org/datasets/movielens/ml-1m.zip"
+# MovieLens-1M as extended by the MeLU authors: plots, directors, actors and cold-start splits
+MELU_URL = "https://raw.githubusercontent.com/hoyeoplee/MeLU/master/movielens/ml-1m/"
+STATE_FILES = ["warm_state", "user_cold_state", "item_cold_state", "user_and_item_cold_state"]
+FILES = [
+    "users.dat",
+    "movies_extrainfos.dat",
+    "m_rate.txt",
+    "m_genre.txt",
+    "m_director.txt",
+    "m_actor.txt",
+    "m_gender.txt",
+    "m_age.txt",
+    "m_occupation.txt",
+    "m_zipcode.txt",
+    *[f"{state}{suffix}.json" for state in STATE_FILES for suffix in ("", "_y")],
+]
 
-def download_movielens_1m(output_dir="data/raw"):
-    """
-    Downloads and extracts the MovieLens-1M dataset into the specified raw data directory.
-    
-    Args:
-        output_dir (str): Relative or absolute path where raw data should be stored.
-    """
-    os.makedirs(output_dir, exist_ok=True)
-    zip_path = os.path.join(output_dir, "ml-1m.zip")
-    extracted_folder = os.path.join(output_dir, "ml-1m")
 
-    if not os.path.exists(extracted_folder):
-        print(f"[Data Download] Downloading MovieLens-1M dataset from {MOVIELENS_URL}...")
-        urllib.request.urlretrieve(MOVIELENS_URL, zip_path)
-        
-        print("[Data Download] Extracting archive...")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(output_dir)
-            
-        os.remove(zip_path)
-        print("[Data Download] Download and extraction completed successfully!")
-    else:
-        print("[Data Download] MovieLens-1M dataset already exists locally. Skipping download.")
+def download_movielens_1m(root="data/ml-1m"):
+    root = Path(root)
+    root.mkdir(parents=True, exist_ok=True)
+    for name in FILES:
+        path = root / name
+        # checked file by file, so an interrupted download picks up where it stopped
+        if not path.exists():
+            part = path.with_suffix(".part")
+            urllib.request.urlretrieve(MELU_URL + name, part)
+            part.rename(path)
+
 
 if __name__ == "__main__":
     download_movielens_1m()
