@@ -1,4 +1,6 @@
-from coldstart.evaluate import evaluate, load_model
+import torch
+
+from coldstart.evaluate import evaluate, load_model, user_mean
 from coldstart.preprocess import load_tasks
 from coldstart.train import train
 
@@ -24,3 +26,10 @@ def test_train_then_evaluate(ml_root, data, tmp_path):
     assert scores["mae"] >= 0
     assert 0 <= scores["ndcg@1"] <= 1
     assert 0 <= scores["ndcg@3"] <= 1
+
+
+def test_user_mean_baseline(data):
+    task = load_tasks(data, "user_cold", seed=0)[0]
+    pred = user_mean(task)
+    assert pred.shape == (10,)
+    assert torch.allclose(pred, task.support_ratings.mean().expand(10))
