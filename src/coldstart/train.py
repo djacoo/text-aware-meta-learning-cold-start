@@ -45,6 +45,7 @@ def train(cfg, seed, out_dir):
             best = val_mae
             torch.save({"config": cfg, "seed": seed, "state": model.state_dict()}, path)
     print(f"best val mae {best:.4f}, saved to {path}")
+    return best
 
 
 def main():
