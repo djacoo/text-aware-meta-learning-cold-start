@@ -17,6 +17,9 @@ outputs/
 *.pth
 *.npy
 *.npz
+*.pkl
+*.csv
+*.dat
 
 # Notebooks
 .ipynb_checkpoints/
