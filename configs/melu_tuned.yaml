@@ -1,0 +1,9 @@
+# Best grid result on warm_val (python -m coldstart.grid)
+data_root: data/ml-1m
+emb_dim: 32
+hidden: 64
+inner_lr: 1.0e-3
+outer_lr: 1.0e-3
+inner_steps: 5
+meta_batch: 32
+epochs: 30

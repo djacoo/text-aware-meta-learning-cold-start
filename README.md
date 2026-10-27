@@ -11,6 +11,15 @@ pip install -e ".[dev]"
 pytest
 ```
 
+## Run
+
+```bash
+python -m coldstart.train --seed 0
+python -m coldstart.evaluate checkpoints/melu_seed*.pt
+```
+
+The MovieLens-1M files are downloaded to `data/ml-1m/` on the first run.
+
 ## Authors
 
 Jacopo Parretti, Stefano Giampaoli, Alessio Brighenti

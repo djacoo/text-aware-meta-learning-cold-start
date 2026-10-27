@@ -1,0 +1,9 @@
+# Values from the MeLU paper (Lee et al., 2019)
+data_root: data/ml-1m
+emb_dim: 32
+hidden: 64
+inner_lr: 5.0e-6
+outer_lr: 5.0e-5
+inner_steps: 1
+meta_batch: 32
+epochs: 30
