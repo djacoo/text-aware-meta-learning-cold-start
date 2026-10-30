@@ -7,6 +7,7 @@ import torch
 
 from coldstart.dataset import MovieLens, Task
 from coldstart.download import download_movielens_1m
+from coldstart.text import load_text_embeddings
 
 VOCAB_FILES = {
     "rate": "m_rate.txt",
@@ -77,14 +78,17 @@ def extract_user_features(root, vocab):
     return features, user_index
 
 
-def load_movielens(root="data/ml-1m"):
+def load_movielens(root="data/ml-1m", text_encoder=None):
     root = Path(root)
     download_movielens_1m(root)
     vocab = {field: load_vocab(root / name) for field, name in VOCAB_FILES.items()}
     item_features, item_index, plots = extract_item_features(root, vocab)
     user_features, user_index = extract_user_features(root, vocab)
     vocab_sizes = {field: len(values) + 1 for field, values in vocab.items()}
-    return MovieLens(root, item_features, user_features, vocab_sizes, item_index, user_index, plots)
+    data = MovieLens(root, item_features, user_features, vocab_sizes, item_index, user_index, plots)
+    if text_encoder:
+        data.text_embeddings = load_text_embeddings(root, plots, text_encoder)
+    return data
 
 
 def prepare_user_tasks(data, state_file, seed):
