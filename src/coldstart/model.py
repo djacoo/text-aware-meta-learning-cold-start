@@ -5,13 +5,15 @@ from torch.func import functional_call
 
 # Only the decision layers adapt to each user, as in MeLU
 LOCAL_PARAMS = ("fc1.weight", "fc1.bias", "fc2.weight", "fc2.bias", "out.weight", "out.bias")
+ID_FIELDS = ("director", "actors")
 
 
 class MeLU(nn.Module):
-    def __init__(self, data, emb_dim=32, hidden=64, text="none"):
+    def __init__(self, data, emb_dim=32, hidden=64, text="none", id_dropout=0.0):
         super().__init__()
         # text is "none", "only" (plot replaces the item fields) or "concat" (plot added to them)
         self.text = text
+        self.id_dropout = id_dropout
         item_features = {} if text == "only" else data.item_features
         self.item_fields = list(item_features)
         self.user_fields = list(data.user_features)
@@ -37,13 +39,30 @@ class MeLU(nn.Module):
         self.out = nn.Linear(hidden, 1)
 
     def forward(self, users, items):
-        x = [self.emb[name](getattr(self, f"item_{name}")[items]) for name in self.item_fields]
+        x = []
+        for name in self.item_fields:
+            v = self.emb[name](getattr(self, f"item_{name}")[items])
+            if self.training and name in ID_FIELDS and self.id_dropout:
+                # hide directors and actors of some items, so the model learns to use the plot
+                keep = torch.rand(len(items), 1, device=v.device) >= self.id_dropout
+                v = v * keep
+            x.append(v)
         if self.text != "none":
             x.append(self.text_proj(self.item_text[items]))
         x += [self.emb[name](getattr(self, f"user_{name}")[users]) for name in self.user_fields]
         x = F.relu(self.fc1(torch.cat(x, dim=1)))
         x = F.relu(self.fc2(x))
         return self.out(x).squeeze(1)
+
+
+def build_model(data, cfg):
+    return MeLU(
+        data,
+        cfg["emb_dim"],
+        cfg["hidden"],
+        cfg.get("text", "none"),
+        cfg.get("id_dropout", 0.0),
+    )
 
 
 def task_inputs(task, device, query=False):

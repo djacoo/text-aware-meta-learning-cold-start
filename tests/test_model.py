@@ -67,6 +67,16 @@ def test_text_only_uses_plot_not_item_fields():
     assert not torch.allclose(model(torch.zeros_like(items), items), before)
 
 
+def test_id_dropout_only_in_training():
+    model = MeLU(fake_data(), emb_dim=8, hidden=16, text="concat", id_dropout=0.5)
+    items = torch.arange(N_ITEMS)
+    users = torch.zeros_like(items)
+    model.eval()
+    assert torch.equal(model(users, items), model(users, items))
+    model.train()
+    assert not torch.equal(model(users, items), model(users, items))
+
+
 def test_adapt_changes_only_local_params():
     model = MeLU(fake_data(), emb_dim=8, hidden=16)
     before = {name: p.detach().clone() for name, p in model.named_parameters()}

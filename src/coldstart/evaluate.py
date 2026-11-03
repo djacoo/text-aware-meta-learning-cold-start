@@ -5,7 +5,7 @@ import numpy as np
 import torch
 
 from coldstart.metrics import mae, ndcg_at_k
-from coldstart.model import MeLU, adapt, predict
+from coldstart.model import adapt, build_model, predict
 from coldstart.preprocess import load_movielens, load_tasks
 
 TEST_STATES = ("warm_test", "user_cold", "item_cold", "user_item_cold")
@@ -24,6 +24,7 @@ def score(tasks, predict_query):
 
 def evaluate(model, tasks, steps, lr):
     device = next(model.parameters()).device
+    model.eval()
 
     def melu(task):
         # first order is enough at test time, no meta-gradient is needed
@@ -46,7 +47,7 @@ def random_ratings(task, generator):
 def load_model(path, data):
     checkpoint = torch.load(path, map_location="cpu")
     cfg = checkpoint["config"]
-    model = MeLU(data, cfg["emb_dim"], cfg["hidden"], cfg.get("text", "none"))
+    model = build_model(data, cfg)
     model.load_state_dict(checkpoint["state"])
     return model, cfg, checkpoint["seed"]
 

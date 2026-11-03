@@ -7,7 +7,7 @@ import torch
 import yaml
 
 from coldstart.evaluate import evaluate
-from coldstart.model import MeLU, meta_step
+from coldstart.model import build_model, meta_step
 from coldstart.preprocess import load_movielens, load_tasks
 
 
@@ -24,7 +24,7 @@ def train(cfg, seed, out_dir):
     train_tasks = load_tasks(data, "warm_train", seed)
     val_tasks = load_tasks(data, "warm_val", seed)
 
-    model = MeLU(data, cfg["emb_dim"], cfg["hidden"], cfg.get("text", "none")).to(device)
+    model = build_model(data, cfg).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg["outer_lr"])
     steps, lr, batch = cfg["inner_steps"], cfg["inner_lr"], cfg["meta_batch"]
 
@@ -32,6 +32,7 @@ def train(cfg, seed, out_dir):
     path = out_dir / f"melu_seed{seed}.pt"
     best = float("inf")
     for epoch in range(1, cfg["epochs"] + 1):
+        model.train()
         random.shuffle(train_tasks)
         losses = [
             meta_step(model, train_tasks[i : i + batch], optimizer, steps, lr)
