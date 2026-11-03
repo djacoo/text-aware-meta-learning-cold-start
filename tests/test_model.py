@@ -77,6 +77,12 @@ def test_id_dropout_only_in_training():
     assert not torch.equal(model(users, items), model(users, items))
 
 
+def test_adapt_text_projection():
+    model = MeLU(fake_data(), emb_dim=8, hidden=16, text="only", adapt_text=True)
+    params = adapt(model, fake_task(), steps=1, lr=0.1)
+    assert not torch.equal(params["text_proj.weight"], model.text_proj.weight)
+
+
 def test_adapt_changes_only_local_params():
     model = MeLU(fake_data(), emb_dim=8, hidden=16)
     before = {name: p.detach().clone() for name, p in model.named_parameters()}

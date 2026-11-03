@@ -9,11 +9,14 @@ ID_FIELDS = ("director", "actors")
 
 
 class MeLU(nn.Module):
-    def __init__(self, data, emb_dim=32, hidden=64, text="none", id_dropout=0.0):
+    def __init__(self, data, emb_dim=32, hidden=64, text="none", id_dropout=0.0, adapt_text=False):
         super().__init__()
         # text is "none", "only" (plot replaces the item fields) or "concat" (plot added to them)
         self.text = text
         self.id_dropout = id_dropout
+        self.local_params = LOCAL_PARAMS
+        if adapt_text:
+            self.local_params += ("text_proj.weight", "text_proj.bias")
         item_features = {} if text == "only" else data.item_features
         self.item_fields = list(item_features)
         self.user_fields = list(data.user_features)
@@ -62,6 +65,7 @@ def build_model(data, cfg):
         cfg["hidden"],
         cfg.get("text", "none"),
         cfg.get("id_dropout", 0.0),
+        cfg.get("adapt_text", False),
     )
 
 
@@ -83,9 +87,9 @@ def adapt(model, task, steps, lr, first_order=False):
     params = dict(model.named_parameters())
     for _ in range(steps):
         loss = F.mse_loss(predict(model, params, users, items), ratings)
-        local = [params[name] for name in LOCAL_PARAMS]
+        local = [params[name] for name in model.local_params]
         grads = torch.autograd.grad(loss, local, create_graph=not first_order)
-        for name, grad in zip(LOCAL_PARAMS, grads, strict=True):
+        for name, grad in zip(model.local_params, grads, strict=True):
             params[name] = params[name] - lr * grad
     return params
 
