@@ -1,7 +1,8 @@
 import pytest
 import torch
 
-from coldstart.evaluate import evaluate, load_model, user_mean
+from coldstart.dataset import Task
+from coldstart.evaluate import evaluate, load_model, text_knn, user_mean
 from coldstart.preprocess import load_movielens, load_tasks
 from coldstart.train import train
 
@@ -37,3 +38,10 @@ def test_user_mean_baseline(data):
     pred = user_mean(task)
     assert pred.shape == (10,)
     assert torch.allclose(pred, task.support_ratings.mean().expand(10))
+
+
+def test_text_knn():
+    embeddings = torch.tensor([[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 0.0]])
+    task = Task(0, torch.tensor([0, 1]), torch.tensor([5.0, 1.0]), torch.tensor([2, 3]), None)
+    # item 2 matches item 0 only, item 3 has no text and gets the user mean
+    assert text_knn(task, embeddings).tolist() == [5.0, 3.0]
