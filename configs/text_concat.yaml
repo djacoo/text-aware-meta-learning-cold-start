@@ -1,4 +1,4 @@
-# Tuned MeLU with plot embeddings
+# Tuned MeLU with plot embeddings next to the item fields
 data_root: data/ml-1m
 emb_dim: 32
 hidden: 64
