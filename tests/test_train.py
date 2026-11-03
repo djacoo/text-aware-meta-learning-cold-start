@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from coldstart.compare import user_errors
+from coldstart import compare
 from coldstart.dataset import Task
 from coldstart.evaluate import evaluate, load_model, text_knn, user_mean
 from coldstart.preprocess import load_movielens, load_tasks
@@ -33,10 +33,29 @@ def test_train_then_evaluate(ml_root, tmp_path, text):
     assert 0 <= scores["ndcg@1"] <= 1
     assert 0 <= scores["ndcg@3"] <= 1
 
-    model_errors, mean_errors = user_errors(
-        [tmp_path / "checkpoints" / "melu_seed0.pt"], "user_cold"
-    )
+
+def test_compare(ml_root, data, tmp_path, capsys):
+    cfg = {
+        "data_root": str(ml_root),
+        "emb_dim": 8,
+        "hidden": 16,
+        "inner_lr": 0.01,
+        "outer_lr": 0.01,
+        "inner_steps": 1,
+        "meta_batch": 4,
+        "epochs": 1,
+    }
+    for seed in (0, 1):
+        train(cfg, seed, tmp_path / str(seed))
+    paths = [str(tmp_path / "0" / "melu_seed0.pt")]
+
+    errors = compare.user_errors(paths)
+    model_errors, mean_errors = errors["user_cold"]
     assert model_errors.shape == mean_errors.shape == (len(load_tasks(data, "user_cold", 0)),)
+
+    capsys.readouterr()
+    compare.main(paths + ["--against", str(tmp_path / "1" / "melu_seed1.pt")])
+    assert len(capsys.readouterr().out.splitlines()) == 5
 
 
 def test_user_mean_baseline(data):
