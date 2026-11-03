@@ -106,7 +106,7 @@ def load_movielens(root="data/ml-1m", text_encoder=None, text_source="plot"):
     )
     if text_encoder:
         # "plot" encodes the plot alone, "full" the whole description
-        texts, name = (plots, "plots") if text_source == "plot" else (descriptions, "full")
+        texts, name = {"plot": (plots, "plots"), "full": (descriptions, "full")}[text_source]
         data.text_embeddings = load_text_embeddings(root, texts, text_encoder, name)
     return data
 

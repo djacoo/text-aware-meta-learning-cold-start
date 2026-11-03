@@ -23,6 +23,13 @@ def test_cached_embeddings_are_loaded(ml_root):
     assert torch.equal(data.text_embeddings, cached)
 
 
+def test_full_descriptions_have_their_own_cache(ml_root):
+    cached = torch.rand(3, 4)
+    torch.save(cached, ml_root / "full_fake-encoder.pt")
+    data = load_movielens(ml_root, "someone/fake-encoder", text_source="full")
+    assert torch.equal(data.text_embeddings, cached)
+
+
 def test_no_text_by_default(data):
     assert data.text_embeddings is None
 
