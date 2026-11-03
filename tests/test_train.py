@@ -1,6 +1,7 @@
 import pytest
 import torch
 
+from coldstart.compare import user_errors
 from coldstart.dataset import Task
 from coldstart.evaluate import evaluate, load_model, text_knn, user_mean
 from coldstart.preprocess import load_movielens, load_tasks
@@ -31,6 +32,11 @@ def test_train_then_evaluate(ml_root, tmp_path, text):
     assert scores["mae"] >= 0
     assert 0 <= scores["ndcg@1"] <= 1
     assert 0 <= scores["ndcg@3"] <= 1
+
+    model_errors, mean_errors = user_errors(
+        [tmp_path / "checkpoints" / "melu_seed0.pt"], "user_cold"
+    )
+    assert model_errors.shape == mean_errors.shape == (len(load_tasks(data, "user_cold", 0)),)
 
 
 def test_user_mean_baseline(data):
