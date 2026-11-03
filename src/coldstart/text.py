@@ -17,6 +17,11 @@ def encode_plots(plots, encoder, batch_size=64):
 
 
 def load_text_embeddings(root, plots, encoder_name=DEFAULT_ENCODER):
+    if encoder_name == "random":
+        # control run: unit vectors with no meaning, same size as BGE
+        vectors = torch.randn(len(plots), 768, generator=torch.Generator().manual_seed(0))
+        return torch.nn.functional.normalize(vectors, dim=1)
+
     path = Path(root) / f"plots_{encoder_name.split('/')[-1]}.pt"
     if path.exists():
         return torch.load(path)

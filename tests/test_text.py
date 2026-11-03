@@ -1,7 +1,7 @@
 import torch
 
 from coldstart.preprocess import load_movielens
-from coldstart.text import encode_plots
+from coldstart.text import encode_plots, load_text_embeddings
 
 
 class FakeEncoder:
@@ -25,3 +25,10 @@ def test_cached_embeddings_are_loaded(ml_root):
 
 def test_no_text_by_default(data):
     assert data.text_embeddings is None
+
+
+def test_random_control(tmp_path):
+    vectors = load_text_embeddings(tmp_path, ["a", "b"], "random")
+    assert vectors.shape == (2, 768)
+    assert torch.allclose(vectors.norm(dim=1), torch.ones(2))
+    assert torch.equal(vectors, load_text_embeddings(tmp_path, ["a", "b"], "random"))
