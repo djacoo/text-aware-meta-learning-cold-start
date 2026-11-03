@@ -11,7 +11,7 @@ ID_FIELDS = ("director", "actors")
 class MeLU(nn.Module):
     def __init__(self, data, emb_dim=32, hidden=64, text="none", id_dropout=0.0, adapt_text=False):
         super().__init__()
-        # text is "none", "only" (plot replaces the item fields) or "concat" (plot added to them)
+        # text is "none", "only" (text replaces the item fields) or "concat" (text added to them)
         self.text = text
         self.id_dropout = id_dropout
         self.local_params = LOCAL_PARAMS
@@ -33,7 +33,7 @@ class MeLU(nn.Module):
 
         n_fields = len(self.item_fields) + len(self.user_fields)
         if text != "none":
-            # plot embeddings are fixed, only the projection is learned
+            # text embeddings are fixed, only the projection is learned
             self.register_buffer("item_text", data.text_embeddings)
             self.text_proj = nn.Linear(data.text_embeddings.shape[1], emb_dim)
             n_fields += 1
@@ -46,7 +46,7 @@ class MeLU(nn.Module):
         for name in self.item_fields:
             v = self.emb[name](getattr(self, f"item_{name}")[items])
             if self.training and name in ID_FIELDS and self.id_dropout:
-                # hide directors and actors of some items, so the model learns to use the plot
+                # hide directors and actors of some items, so the model learns to use the text
                 keep = torch.rand(len(items), 1, device=v.device) >= self.id_dropout
                 v = v * keep
             x.append(v)
