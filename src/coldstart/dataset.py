@@ -22,4 +22,5 @@ class MovieLens:
     item_index: dict[int, int]
     user_index: dict[int, int]
     plots: list[str]
+    descriptions: list[str]
     text_embeddings: Tensor | None = None

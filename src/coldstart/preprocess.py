@@ -54,6 +54,21 @@ def pad(rows):
     return out
 
 
+def describe(row):
+    # title, year, genres, people and plot in one text, skipping missing parts
+    title, year, genre, director, actors, plot = row[1], row[2], row[5], row[6], row[8], row[9]
+    parts = [f"{title} ({year})."]
+    if genre != "N/A":
+        parts.append(f"{genre}.")
+    if director != "N/A":
+        parts.append(f"Directed by {', '.join(split_values(director, 'director'))}.")
+    if actors != "N/A":
+        parts.append(f"Starring {actors}.")
+    if plot != "N/A":
+        parts.append(plot)
+    return " ".join(parts)
+
+
 def extract_item_features(root, vocab):
     # movie_id, title, year, rate, released, genre, director, writer, actors, plot, poster
     rows = read_rows(root / "movies_extrainfos.dat")
@@ -63,7 +78,8 @@ def extract_item_features(root, vocab):
         features[field] = pad([[vocab[field][v] for v in row] for row in values])
     item_index = {int(row[0]): i for i, row in enumerate(rows)}
     plots = [row[9] for row in rows]
-    return features, item_index, plots
+    descriptions = [describe(row) for row in rows]
+    return features, item_index, plots, descriptions
 
 
 def extract_user_features(root, vocab):
@@ -78,16 +94,20 @@ def extract_user_features(root, vocab):
     return features, user_index
 
 
-def load_movielens(root="data/ml-1m", text_encoder=None):
+def load_movielens(root="data/ml-1m", text_encoder=None, text_source="plot"):
     root = Path(root)
     download_movielens_1m(root)
     vocab = {field: load_vocab(root / name) for field, name in VOCAB_FILES.items()}
-    item_features, item_index, plots = extract_item_features(root, vocab)
+    item_features, item_index, plots, descriptions = extract_item_features(root, vocab)
     user_features, user_index = extract_user_features(root, vocab)
     vocab_sizes = {field: len(values) + 1 for field, values in vocab.items()}
-    data = MovieLens(root, item_features, user_features, vocab_sizes, item_index, user_index, plots)
+    data = MovieLens(
+        root, item_features, user_features, vocab_sizes, item_index, user_index, plots, descriptions
+    )
     if text_encoder:
-        data.text_embeddings = load_text_embeddings(root, plots, text_encoder)
+        # "plot" encodes the plot alone, "full" the whole description
+        texts, name = (plots, "plots") if text_source == "plot" else (descriptions, "full")
+        data.text_embeddings = load_text_embeddings(root, texts, text_encoder, name)
     return data
 
 

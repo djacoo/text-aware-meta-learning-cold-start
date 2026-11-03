@@ -16,13 +16,13 @@ def encode_plots(plots, encoder, batch_size=64):
     return vectors
 
 
-def load_text_embeddings(root, plots, encoder_name=DEFAULT_ENCODER):
+def load_text_embeddings(root, plots, encoder_name=DEFAULT_ENCODER, name="plots"):
     if encoder_name == "random":
         # control run: unit vectors with no meaning, same size as BGE
         vectors = torch.randn(len(plots), 768, generator=torch.Generator().manual_seed(0))
         return torch.nn.functional.normalize(vectors, dim=1)
 
-    path = Path(root) / f"plots_{encoder_name.split('/')[-1]}.pt"
+    path = Path(root) / f"{name}_{encoder_name.split('/')[-1]}.pt"
     if path.exists():
         return torch.load(path)
 
@@ -40,10 +40,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--encoder", default=DEFAULT_ENCODER)
     parser.add_argument("--root", default="data/ml-1m")
+    parser.add_argument("--source", default="plot", choices=["plot", "full"])
     args = parser.parse_args()
 
-    vectors = load_movielens(args.root, text_encoder=args.encoder).text_embeddings
-    print(f"{len(vectors)} plots, {vectors.shape[1]} dimensions")
+    vectors = load_movielens(args.root, args.encoder, args.source).text_embeddings
+    print(f"{len(vectors)} texts, {vectors.shape[1]} dimensions")
 
 
 if __name__ == "__main__":

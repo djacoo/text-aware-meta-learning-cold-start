@@ -20,7 +20,7 @@ def set_seed(seed):
 def train(cfg, seed, out_dir):
     set_seed(seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    data = load_movielens(cfg["data_root"], cfg.get("text_encoder"))
+    data = load_movielens(cfg["data_root"], cfg.get("text_encoder"), cfg.get("text_source", "plot"))
     train_tasks = load_tasks(data, "warm_train", seed)
     val_tasks = load_tasks(data, "warm_val", seed)
 

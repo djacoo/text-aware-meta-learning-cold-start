@@ -58,7 +58,7 @@ def main():
     args = parser.parse_args()
 
     cfg = torch.load(args.checkpoints[0], map_location="cpu")["config"]
-    data = load_movielens(cfg["data_root"], cfg.get("text_encoder"))
+    data = load_movielens(cfg["data_root"], cfg.get("text_encoder"), cfg.get("text_source", "plot"))
     methods = ("melu", "user mean", "random")
     results = {m: {s: {name: [] for name in METRICS} for s in TEST_STATES} for m in methods}
     for path in args.checkpoints:
