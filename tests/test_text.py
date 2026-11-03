@@ -1,7 +1,7 @@
 import torch
 
 from coldstart.preprocess import load_movielens
-from coldstart.text import encode_plots, load_text_embeddings
+from coldstart.text import encode_texts, load_text_embeddings
 
 
 class FakeEncoder:
@@ -10,7 +10,7 @@ class FakeEncoder:
 
 
 def test_missing_plot_is_zero():
-    vectors = encode_plots(["A plot.", "N/A", "Another plot."], FakeEncoder())
+    vectors = encode_texts(["A plot.", "N/A", "Another plot."], FakeEncoder())
     assert vectors.shape == (3, 4)
     assert torch.equal(vectors[1], torch.zeros(4))
     assert torch.allclose(vectors[[0, 2]].norm(dim=1), torch.ones(2))

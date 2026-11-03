@@ -3,23 +3,23 @@ from pathlib import Path
 
 import torch
 
-DEFAULT_ENCODER = "sentence-transformers/all-MiniLM-L6-v2"
+DEFAULT_ENCODER = "BAAI/bge-base-en-v1.5"
 
 
-def encode_plots(plots, encoder, batch_size=64):
+def encode_texts(texts, encoder, batch_size=64):
     vectors = encoder.encode(
-        plots, batch_size=batch_size, convert_to_tensor=True, normalize_embeddings=True
+        texts, batch_size=batch_size, convert_to_tensor=True, normalize_embeddings=True
     )
     vectors = vectors.cpu().float()
     # movies without a plot get a zero vector, not the embedding of the string "N/A"
-    vectors[torch.tensor([plot == "N/A" for plot in plots])] = 0
+    vectors[torch.tensor([text == "N/A" for text in texts])] = 0
     return vectors
 
 
-def load_text_embeddings(root, plots, encoder_name=DEFAULT_ENCODER, name="plots"):
+def load_text_embeddings(root, texts, encoder_name=DEFAULT_ENCODER, name="plots"):
     if encoder_name == "random":
         # control run: unit vectors with no meaning, same size as BGE
-        vectors = torch.randn(len(plots), 768, generator=torch.Generator().manual_seed(0))
+        vectors = torch.randn(len(texts), 768, generator=torch.Generator().manual_seed(0))
         return torch.nn.functional.normalize(vectors, dim=1)
 
     path = Path(root) / f"{name}_{encoder_name.split('/')[-1]}.pt"
@@ -29,7 +29,7 @@ def load_text_embeddings(root, plots, encoder_name=DEFAULT_ENCODER, name="plots"
     # imported here so runs without text don't load transformers
     from sentence_transformers import SentenceTransformer
 
-    vectors = encode_plots(plots, SentenceTransformer(encoder_name))
+    vectors = encode_texts(texts, SentenceTransformer(encoder_name))
     torch.save(vectors, path)
     return vectors
 
