@@ -9,7 +9,6 @@ venv/
 
 # Data, embeddings, results
 data/
-ml/
 checkpoints/
 runs/
 wandb/
