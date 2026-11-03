@@ -20,11 +20,11 @@ def set_seed(seed):
 def train(cfg, seed, out_dir):
     set_seed(seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    data = load_movielens(cfg["data_root"])
+    data = load_movielens(cfg["data_root"], cfg.get("text_encoder"))
     train_tasks = load_tasks(data, "warm_train", seed)
     val_tasks = load_tasks(data, "warm_val", seed)
 
-    model = MeLU(data, cfg["emb_dim"], cfg["hidden"]).to(device)
+    model = MeLU(data, cfg["emb_dim"], cfg["hidden"], cfg.get("text", "none")).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg["outer_lr"])
     steps, lr, batch = cfg["inner_steps"], cfg["inner_lr"], cfg["meta_batch"]
 

@@ -1,11 +1,14 @@
+import pytest
 import torch
 
 from coldstart.evaluate import evaluate, load_model, user_mean
-from coldstart.preprocess import load_tasks
+from coldstart.preprocess import load_movielens, load_tasks
 from coldstart.train import train
 
 
-def test_train_then_evaluate(ml_root, data, tmp_path):
+@pytest.mark.parametrize("text", [{}, {"text": "concat", "text_encoder": "someone/fake-encoder"}])
+def test_train_then_evaluate(ml_root, tmp_path, text):
+    torch.save(torch.rand(3, 4), ml_root / "plots_fake-encoder.pt")
     cfg = {
         "data_root": str(ml_root),
         "emb_dim": 8,
@@ -15,9 +18,10 @@ def test_train_then_evaluate(ml_root, data, tmp_path):
         "inner_steps": 1,
         "meta_batch": 4,
         "epochs": 2,
-    }
+    } | text
     train(cfg, seed=0, out_dir=tmp_path / "checkpoints")
 
+    data = load_movielens(ml_root, cfg.get("text_encoder"))
     model, saved_cfg, seed = load_model(tmp_path / "checkpoints" / "melu_seed0.pt", data)
     assert saved_cfg == cfg
     assert seed == 0

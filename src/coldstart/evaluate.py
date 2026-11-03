@@ -46,7 +46,7 @@ def random_ratings(task, generator):
 def load_model(path, data):
     checkpoint = torch.load(path, map_location="cpu")
     cfg = checkpoint["config"]
-    model = MeLU(data, cfg["emb_dim"], cfg["hidden"])
+    model = MeLU(data, cfg["emb_dim"], cfg["hidden"], cfg.get("text", "none"))
     model.load_state_dict(checkpoint["state"])
     return model, cfg, checkpoint["seed"]
 
@@ -57,7 +57,7 @@ def main():
     args = parser.parse_args()
 
     cfg = torch.load(args.checkpoints[0], map_location="cpu")["config"]
-    data = load_movielens(cfg["data_root"])
+    data = load_movielens(cfg["data_root"], cfg.get("text_encoder"))
     methods = ("melu", "user mean", "random")
     results = {m: {s: {name: [] for name in METRICS} for s in TEST_STATES} for m in methods}
     for path in args.checkpoints:
