@@ -35,7 +35,7 @@ def test_no_text_by_default(data):
 
 
 def test_random_control(tmp_path):
-    vectors = load_text_embeddings(tmp_path, ["a", "b"], "random")
-    assert vectors.shape == (2, 768)
-    assert torch.allclose(vectors.norm(dim=1), torch.ones(2))
-    assert torch.equal(vectors, load_text_embeddings(tmp_path, ["a", "b"], "random"))
+    vectors = load_text_embeddings(tmp_path, ["a", "N/A", "b"], "random")
+    assert vectors.shape == (3, 768)
+    assert torch.allclose(vectors.norm(dim=1), torch.tensor([1.0, 0.0, 1.0]))
+    assert torch.equal(vectors, load_text_embeddings(tmp_path, ["a", "N/A", "b"], "random"))

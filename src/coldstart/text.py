@@ -6,21 +6,27 @@ import torch
 DEFAULT_ENCODER = "BAAI/bge-base-en-v1.5"
 
 
+def missing(texts):
+    return torch.tensor([text == "N/A" for text in texts])
+
+
 def encode_texts(texts, encoder, batch_size=64):
     vectors = encoder.encode(
         texts, batch_size=batch_size, convert_to_tensor=True, normalize_embeddings=True
     )
     vectors = vectors.cpu().float()
     # movies without a plot get a zero vector, not the embedding of the string "N/A"
-    vectors[torch.tensor([text == "N/A" for text in texts])] = 0
+    vectors[missing(texts)] = 0
     return vectors
 
 
 def load_text_embeddings(root, texts, encoder_name=DEFAULT_ENCODER, name="plots"):
     if encoder_name == "random":
-        # control run: unit vectors with no meaning, same size as BGE
+        # control run: unit vectors with no meaning, same size as BGE, zero where text is missing
         vectors = torch.randn(len(texts), 768, generator=torch.Generator().manual_seed(0))
-        return torch.nn.functional.normalize(vectors, dim=1)
+        vectors = torch.nn.functional.normalize(vectors, dim=1)
+        vectors[missing(texts)] = 0
+        return vectors
 
     path = Path(root) / f"{name}_{encoder_name.split('/')[-1]}.pt"
     if path.exists():
