@@ -49,15 +49,21 @@ def train(cfg, seed, out_dir):
     return best
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/melu.yaml")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", default="checkpoints")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--set", nargs="*", default=[], metavar="KEY=VALUE", help="change config values"
+    )
+    args = parser.parse_args(argv)
 
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
+    for item in args.set:
+        key, value = item.split("=", 1)
+        cfg[key] = yaml.safe_load(value)
     train(cfg, args.seed, Path(args.out))
 
 

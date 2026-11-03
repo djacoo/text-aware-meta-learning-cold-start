@@ -5,6 +5,7 @@ from coldstart import compare
 from coldstart.dataset import Task
 from coldstart.evaluate import evaluate, load_model, text_knn, user_mean
 from coldstart.preprocess import load_movielens, load_tasks
+from coldstart.train import main as train_main
 from coldstart.train import train
 
 
@@ -56,6 +57,19 @@ def test_compare(ml_root, data, tmp_path, capsys):
     capsys.readouterr()
     compare.main(paths + ["--against", str(tmp_path / "1" / "melu_seed1.pt")])
     assert len(capsys.readouterr().out.splitlines()) == 5
+
+
+def test_set_changes_config(ml_root, tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"data_root: {ml_root}\nemb_dim: 8\nhidden: 16\ninner_lr: 0.01\nouter_lr: 0.01\n"
+        "inner_steps: 1\nmeta_batch: 4\nepochs: 2\n"
+    )
+    out = tmp_path / "out"
+    train_main(["--config", str(config), "--out", str(out), "--set", "epochs=1", "text=none"])
+    cfg = torch.load(out / "melu_seed0.pt")["config"]
+    assert cfg["epochs"] == 1
+    assert cfg["text"] == "none"
 
 
 def test_user_mean_baseline(data):
