@@ -14,7 +14,8 @@ def encode_texts(texts, encoder, batch_size=64):
     vectors = encoder.encode(
         texts, batch_size=batch_size, convert_to_tensor=True, normalize_embeddings=True
     )
-    vectors = vectors.cpu().float()
+    # encode returns an inference tensor, which cannot be changed in place
+    vectors = vectors.cpu().float().clone()
     # movies without a plot get a zero vector, not the embedding of the string "N/A"
     vectors[missing(texts)] = 0
     return vectors

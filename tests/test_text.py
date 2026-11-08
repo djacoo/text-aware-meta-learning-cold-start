@@ -6,7 +6,8 @@ from coldstart.text import encode_texts, load_text_embeddings
 
 class FakeEncoder:
     def encode(self, plots, batch_size, convert_to_tensor, normalize_embeddings):
-        return torch.nn.functional.normalize(torch.rand(len(plots), 4), dim=1)
+        with torch.inference_mode():
+            return torch.nn.functional.normalize(torch.rand(len(plots), 4), dim=1)
 
 
 def test_missing_plot_is_zero():
