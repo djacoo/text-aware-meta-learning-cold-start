@@ -18,7 +18,7 @@ def get_candidate_pool(task):
 def select_random(all_items, k, **kwargs):
     """
     Baseline strategy: selects k items completely at random.
-    It serves as the lower-bound baseline to prove that Active Learning actually provides a 
+    It serves as the lower-bound baseline to prove that Active Learning actually provides a
     statistically significant advantage.
     """
     n = all_items.size(0)
