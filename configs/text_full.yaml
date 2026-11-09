@@ -1,0 +1,13 @@
+# Tuned MeLU with full item descriptions and director/actor dropout
+data_root: data/ml-1m
+emb_dim: 32
+hidden: 64
+inner_lr: 1.0e-3
+outer_lr: 1.0e-3
+inner_steps: 5
+meta_batch: 32
+epochs: 30
+text: concat
+text_encoder: BAAI/bge-base-en-v1.5
+id_dropout: 0.5
+text_source: full
