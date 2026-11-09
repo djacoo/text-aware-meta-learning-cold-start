@@ -38,3 +38,10 @@ def test_warm_split(data):
     assert [len(p) for p in parts] == [14, 1, 3]
     assert not (parts[0] & parts[1] or parts[0] & parts[2] or parts[1] & parts[2])
     assert {task.user for task in load_tasks(data, "warm_val", seed=7)} == parts[1]
+
+
+def test_descriptions(data):
+    assert data.descriptions[1] == (
+        "Movie B (1996). Drama. Directed by Ann Lee, Dan Moe. Starring Bo Ray. B plot."
+    )
+    assert data.descriptions[2] == "Movie C (1997)."

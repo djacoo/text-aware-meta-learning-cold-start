@@ -12,6 +12,7 @@ dependencies = [
     "torch>=2.2",
     "numpy",
     "pyyaml",
+    "scipy",
     "sentence-transformers",
 ]
 
