@@ -1,21 +1,19 @@
 import torch
 import torch.nn as nn
-from src.coldstart.dataset import Task, MovieLens
 
 
 class UserTextPrototype(nn.Module):
     """
     Computes a user text prototype p_u from support set item text embeddings and ratings.
     """
+
     def __init__(self, text_dim: int, proto_dim: int, rating_threshold: float = 3.5):
         super().__init__()
         self.rating_threshold = rating_threshold
-        
+
         # Maps concatenated [pos_proto | neg_proto] to latent space
         self.proto_encoder = nn.Sequential(
-            nn.Linear(text_dim * 2, proto_dim),
-            nn.ReLU(),
-            nn.Linear(proto_dim, proto_dim)
+            nn.Linear(text_dim * 2, proto_dim), nn.ReLU(), nn.Linear(proto_dim, proto_dim)
         )
 
     def forward(self, supp_text_emb: torch.Tensor, supp_ratings: torch.Tensor) -> torch.Tensor:
@@ -41,11 +39,12 @@ class ProtoProjector(nn.Module):
     """
     Projects user prototype p_u into parameter deltas matching MeLU local parameters.
     """
+
     def __init__(self, proto_dim: int, model: nn.Module, local_param_names: tuple):
         super().__init__()
         self.projectors = nn.ModuleDict()
         named_params = dict(model.named_parameters())
-        
+
         for name in local_param_names:
             param_numel = named_params[name].numel()
             key = name.replace(".", "_")

@@ -1,16 +1,16 @@
 import sys
 from pathlib import Path
 
+import torch
+
+from src.coldstart.dataset import MovieLens, Task
+from src.coldstart.model import LOCAL_PARAMS, MeLU, adapt, meta_step
+from src.coldstart.prototype import ProtoProjector, UserTextPrototype
+
 # Add project root to sys.path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
-import torch
-from src.coldstart.dataset import Task, MovieLens
-from src.coldstart.prototype import UserTextPrototype, ProtoProjector
-from src.coldstart.model import MeLU, LOCAL_PARAMS, adapt, meta_step
-
 
 def run_integration_test():
     print("--- 1. Setting up Mock Data & Architecture ---")
@@ -30,7 +30,7 @@ def run_integration_test():
         item_index={i: i for i in range(num_items)},
         user_index={i: i for i in range(num_users)},
         plots=[],
-        text_embeddings=torch.randn(num_items, text_dim)  # Mock text embeddings
+        text_embeddings=torch.randn(num_items, text_dim),  # Mock text embeddings
     )
 
     # 2. Mock Tasks (Support Set = 5 items, Query Set = 3 items)
@@ -40,21 +40,23 @@ def run_integration_test():
             support_items=torch.tensor([0, 1, 2, 3, 4]),
             support_ratings=torch.tensor([5.0, 4.0, 1.0, 2.0, 5.0]),
             query_items=torch.tensor([5, 6, 7]),
-            query_ratings=torch.tensor([4.0, 1.0, 3.0])
+            query_ratings=torch.tensor([4.0, 1.0, 3.0]),
         ),
         Task(
             user=1,
             support_items=torch.tensor([10, 11, 12, 13, 14]),
             support_ratings=torch.tensor([2.0, 1.0, 5.0, 4.0, 3.0]),
             query_items=torch.tensor([15, 16, 17]),
-            query_ratings=torch.tensor([2.0, 5.0, 4.0])
-        )
+            query_ratings=torch.tensor([2.0, 5.0, 4.0]),
+        ),
     ]
 
     # 3. Instantiate Models
     melu_model = MeLU(mock_dataset, emb_dim=emb_dim, hidden=hidden_dim)
     proto_net = UserTextPrototype(text_dim=text_dim, proto_dim=proto_dim)
-    proto_projector = ProtoProjector(proto_dim=proto_dim, model=melu_model, local_param_names=LOCAL_PARAMS)
+    proto_projector = ProtoProjector(
+        proto_dim=proto_dim, model=melu_model, local_param_names=LOCAL_PARAMS
+    )
 
     print("--- 2. Testing Single User Adaptation (adapt) ---")
     adapted_params = adapt(
@@ -65,24 +67,27 @@ def run_integration_test():
         first_order=False,
         proto_net=proto_net,
         proto_projector=proto_projector,
-        data=mock_dataset
+        data=mock_dataset,
     )
-    
+
     # Assert all local parameters were modified and match target shapes
     for name in LOCAL_PARAMS:
-        assert name in adapted_params, f"Missing parameter {name} in adapted_params"
-        assert adapted_params[name].shape == dict(melu_model.named_parameters())[name].shape, \
-            f"Shape mismatch for {name}: expected {dict(melu_model.named_parameters())[name].shape}, got {adapted_params[name].shape}"
+            assert name in adapted_params, f"Missing parameter {name} in adapted_params"
+            expected_shape = dict(melu_model.named_parameters())[name].shape
+            actual_shape = adapted_params[name].shape
+            assert actual_shape == expected_shape, (
+                f"Shape mismatch for {name}: expected {expected_shape}, got {actual_shape}"
+            )
 
     print("[SUCCESS] Single adaptation step executed with matching parameter shapes.")
 
     print("--- 3. Testing Full Meta-Step & Backpropagation ---")
     # Group all trainable parameters in optimizer
     optimizer = torch.optim.Adam(
-        list(melu_model.parameters()) + 
-        list(proto_net.parameters()) + 
-        list(proto_projector.parameters()), 
-        lr=1e-3
+        list(melu_model.parameters())
+        + list(proto_net.parameters())
+        + list(proto_projector.parameters()),
+        lr=1e-3,
     )
 
     # Perform meta-step
@@ -95,7 +100,7 @@ def run_integration_test():
         first_order=False,
         proto_net=proto_net,
         proto_projector=proto_projector,
-        data=mock_dataset
+        data=mock_dataset,
     )
 
     # Assert loss value

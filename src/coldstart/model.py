@@ -4,7 +4,6 @@ from torch import nn
 from torch.func import functional_call
 
 # Import modules from your prototype.py
-from src.coldstart.prototype import UserTextPrototype, ProtoProjector
 
 # Only the decision layers adapt to each user, as in MeLU
 LOCAL_PARAMS = ("fc1.weight", "fc1.bias", "fc2.weight", "fc2.bias", "out.weight", "out.bias")
@@ -82,22 +81,24 @@ def predict(model, params, users, items):
     return functional_call(model, params, (users, items))
 
 
-def adapt(model, task, steps, lr, first_order=False, proto_net=None, proto_projector=None, data=None):
+def adapt(
+    model, task, steps, lr, first_order=False, proto_net=None, proto_projector=None, data=None
+):
     device = next(model.parameters()).device
     users, items, ratings = task_inputs(task, device)
     params = dict(model.named_parameters())
-    
+
     # --- PROTO-MAML INITIALIZATION (IF PROVIDED) ---
     if proto_net is not None and proto_projector is not None and data is not None:
         supp_text_emb = data.text_embeddings.to(device)[task.support_items.to(device)]
         supp_ratings = task.support_ratings.to(device)
-        
+
         # 1. Compute p_u using UserTextPrototype from prototype.py
         p_u = proto_net(supp_text_emb, supp_ratings)
-        
+
         # 2. Compute deltas using ProtoProjector from prototype.py
         deltas = proto_projector(p_u, params)
-        
+
         # 3. Shift initial parameters before inner loop
         for name in LOCAL_PARAMS:
             params[name] = params[name] + deltas[name]
@@ -112,14 +113,33 @@ def adapt(model, task, steps, lr, first_order=False, proto_net=None, proto_proje
     return params
 
 
-def meta_step(model, tasks, optimizer, steps, lr, first_order=False, proto_net=None, proto_projector=None, data=None):
+def meta_step(
+    model,
+    tasks,
+    optimizer,
+    steps,
+    lr,
+    first_order=False,
+    proto_net=None,
+    proto_projector=None,
+    data=None,
+):
     device = next(model.parameters()).device
     losses = []
     for task in tasks:
-        params = adapt(model, task, steps, lr, first_order, proto_net=proto_net, proto_projector=proto_projector, data=data)
+        params = adapt(
+            model,
+            task,
+            steps,
+            lr,
+            first_order,
+            proto_net=proto_net,
+            proto_projector=proto_projector,
+            data=data,
+        )
         users, items, ratings = task_inputs(task, device, query=True)
         losses.append(F.mse_loss(predict(model, params, users, items), ratings))
-        
+
     loss = torch.stack(losses).mean()
     optimizer.zero_grad()
     loss.backward()
