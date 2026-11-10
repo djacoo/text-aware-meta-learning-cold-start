@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+
 def run_integration_test():
     print("--- 1. Setting up Mock Data & Architecture ---")
     num_items = 50
@@ -72,12 +73,12 @@ def run_integration_test():
 
     # Assert all local parameters were modified and match target shapes
     for name in LOCAL_PARAMS:
-            assert name in adapted_params, f"Missing parameter {name} in adapted_params"
-            expected_shape = dict(melu_model.named_parameters())[name].shape
-            actual_shape = adapted_params[name].shape
-            assert actual_shape == expected_shape, (
-                f"Shape mismatch for {name}: expected {expected_shape}, got {actual_shape}"
-            )
+        assert name in adapted_params, f"Missing parameter {name} in adapted_params"
+        expected_shape = dict(melu_model.named_parameters())[name].shape
+        actual_shape = adapted_params[name].shape
+        assert actual_shape == expected_shape, (
+            f"Shape mismatch for {name}: expected {expected_shape}, got {actual_shape}"
+        )
 
     print("[SUCCESS] Single adaptation step executed with matching parameter shapes.")
 
