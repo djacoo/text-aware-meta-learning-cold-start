@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import pytest
 import torch
 
 from coldstart.model import LOCAL_PARAMS, MeLU, adapt, meta_step, predict, task_inputs
@@ -24,7 +25,10 @@ def fake_data():
     sizes = {"rate": 4, "genre": 6, "director": 5, "actors": 8}
     sizes |= {"gender": 3, "age": 8, "occupation": 22, "zip": 20}
     return SimpleNamespace(
-        item_features=item_features, user_features=user_features, vocab_sizes=sizes
+        item_features=item_features,
+        user_features=user_features,
+        vocab_sizes=sizes,
+        text_embeddings=torch.rand(N_ITEMS, 6),
     )
 
 
@@ -45,10 +49,38 @@ def query_loss(model, params, task):
     return torch.nn.functional.mse_loss(predict(model, params, users, items), ratings)
 
 
-def test_output_shape():
-    model = MeLU(fake_data(), emb_dim=8, hidden=16)
+@pytest.mark.parametrize("text", ["none", "only", "concat"])
+def test_output_shape(text):
+    model = MeLU(fake_data(), emb_dim=8, hidden=16, text=text)
     items = torch.arange(5)
     assert model(torch.zeros_like(items), items).shape == (5,)
+
+
+def test_text_only_uses_plot_not_item_fields():
+    model = MeLU(fake_data(), emb_dim=8, hidden=16, text="only")
+    buffers = [name for name, _ in model.named_buffers() if name.startswith("item_")]
+    assert buffers == ["item_text"]
+
+    items = torch.arange(5)
+    before = model(torch.zeros_like(items), items)
+    model.item_text.zero_()
+    assert not torch.allclose(model(torch.zeros_like(items), items), before)
+
+
+def test_id_dropout_only_in_training():
+    model = MeLU(fake_data(), emb_dim=8, hidden=16, text="concat", id_dropout=0.5)
+    items = torch.arange(N_ITEMS)
+    users = torch.zeros_like(items)
+    model.eval()
+    assert torch.equal(model(users, items), model(users, items))
+    model.train()
+    assert not torch.equal(model(users, items), model(users, items))
+
+
+def test_adapt_text_projection():
+    model = MeLU(fake_data(), emb_dim=8, hidden=16, text="only", adapt_text=True)
+    params = adapt(model, fake_task(), steps=1, lr=0.1)
+    assert not torch.equal(params["text_proj.weight"], model.text_proj.weight)
 
 
 def test_adapt_changes_only_local_params():

@@ -7,7 +7,7 @@ import torch
 import yaml
 
 from coldstart.evaluate import evaluate
-from coldstart.model import MeLU, meta_step
+from coldstart.model import build_model, meta_step
 from coldstart.preprocess import load_movielens, load_tasks
 
 
@@ -20,11 +20,11 @@ def set_seed(seed):
 def train(cfg, seed, out_dir):
     set_seed(seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    data = load_movielens(cfg["data_root"])
+    data = load_movielens(cfg["data_root"], cfg.get("text_encoder"), cfg.get("text_source", "plot"))
     train_tasks = load_tasks(data, "warm_train", seed)
     val_tasks = load_tasks(data, "warm_val", seed)
 
-    model = MeLU(data, cfg["emb_dim"], cfg["hidden"]).to(device)
+    model = build_model(data, cfg).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg["outer_lr"])
     steps, lr, batch = cfg["inner_steps"], cfg["inner_lr"], cfg["meta_batch"]
 
@@ -32,6 +32,7 @@ def train(cfg, seed, out_dir):
     path = out_dir / f"melu_seed{seed}.pt"
     best = float("inf")
     for epoch in range(1, cfg["epochs"] + 1):
+        model.train()
         random.shuffle(train_tasks)
         losses = [
             meta_step(model, train_tasks[i : i + batch], optimizer, steps, lr)
@@ -48,15 +49,21 @@ def train(cfg, seed, out_dir):
     return best
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/melu.yaml")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", default="checkpoints")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--set", nargs="*", default=[], metavar="KEY=VALUE", help="change config values"
+    )
+    args = parser.parse_args(argv)
 
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
+    for item in args.set:
+        key, value = item.split("=", 1)
+        cfg[key] = yaml.safe_load(value)
     train(cfg, args.seed, Path(args.out))
 
 
