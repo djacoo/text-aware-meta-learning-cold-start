@@ -3,9 +3,9 @@ import torch
 
 from coldstart.active_learning import (
     compute_rating_frequencies,
-    select_random,
     select_ensemble_uncertainty,
     select_expected_model_change,
+    select_random,
     select_text_diversity,
 )
 from coldstart.dataset import Task
@@ -97,33 +97,32 @@ def main():
 
         # Random test
         mae_rand, rmse_rand = evaluate_active_learning(
-            model, 
-            tasks, 
-            inner_steps, 
-            inner_lr, 
-            k_items, 
-            select_random
+            model, tasks, inner_steps, inner_lr, k_items, select_random
         )
         print(f"Random      -> MAE: {mae_rand:.4f}, RMSE: {rmse_rand:.4f}")
 
         # Uncertainty test
         mae_unc, rmse_unc = evaluate_active_learning(
-            model, 
-            tasks, 
-            inner_steps, 
-            inner_lr, 
-            k_items, 
-            select_ensemble_uncertainty, 
-            ensemble_models=ensemble_models
+            model,
+            tasks,
+            inner_steps,
+            inner_lr,
+            k_items,
+            select_ensemble_uncertainty,
+            ensemble_models=ensemble_models,
         )
         print(f"Ensemble Uncertainty -> MAE: {mae_unc:.4f}, RMSE: {rmse_unc:.4f}")
 
         # Expected Model Change Test
         mae_emc, rmse_emc = evaluate_active_learning(
-            model, tasks, inner_steps, inner_lr, k_items, 
-            select_expected_model_change, 
-            melu_model=model, 
-            rating_freqs=dynamic_rating_freqs
+            model,
+            tasks,
+            inner_steps,
+            inner_lr,
+            k_items,
+            select_expected_model_change,
+            melu_model=model,
+            rating_freqs=dynamic_rating_freqs,
         )
         print(f"Exp. Model Change -> MAE: {mae_emc:.4f}, RMSE: {rmse_emc:.4f}")
 
