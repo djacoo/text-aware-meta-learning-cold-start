@@ -9,6 +9,7 @@ import yaml
 from coldstart.evaluate import evaluate
 from coldstart.model import build_model, meta_step
 from coldstart.preprocess import load_movielens, load_tasks
+from coldstart.prototype import PROTO_TARGET_PARAMS, ProtoProjector, UserTextPrototype
 
 
 def set_seed(seed):
@@ -25,26 +26,78 @@ def train(cfg, seed, out_dir):
     val_tasks = load_tasks(data, "warm_val", seed)
 
     model = build_model(data, cfg).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=cfg["outer_lr"])
+
+    # Inizializzazione condizionale Proto-MAML
+    if cfg.get("proto", False):
+        text_dim = data.text_embeddings.shape[1]
+        proto_dim = cfg.get("proto_dim", 32)
+        proto_net = UserTextPrototype(text_dim=text_dim, proto_dim=proto_dim).to(device)
+        proto_projector = ProtoProjector(
+            proto_dim=proto_dim, model=model, local_param_names=PROTO_TARGET_PARAMS
+        ).to(device)
+        params = (
+            list(model.parameters())
+            + list(proto_net.parameters())
+            + list(proto_projector.parameters())
+        )
+    else:
+        proto_net = None
+        proto_projector = None
+        params = model.parameters()
+
+    optimizer = torch.optim.Adam(params, lr=cfg["outer_lr"])
     steps, lr, batch = cfg["inner_steps"], cfg["inner_lr"], cfg["meta_batch"]
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / f"melu_seed{seed}.pt"
+    filename = f"proto_melu_seed{seed}.pt" if cfg.get("proto", False) else f"melu_seed{seed}.pt"
+    path = out_dir / filename
     best = float("inf")
+
     for epoch in range(1, cfg["epochs"] + 1):
         model.train()
+        if proto_net is not None:
+            proto_net.train()
+            proto_projector.train()
+
         random.shuffle(train_tasks)
         losses = [
-            meta_step(model, train_tasks[i : i + batch], optimizer, steps, lr)
+            meta_step(
+                model,
+                train_tasks[i : i + batch],
+                optimizer,
+                steps,
+                lr,
+                proto_net=proto_net,
+                proto_projector=proto_projector,
+                data=data,
+            )
             for i in range(0, len(train_tasks), batch)
         ]
-        val_mae = evaluate(model, val_tasks, steps, lr)["mae"]
+
+        val_mae = evaluate(
+            model,
+            val_tasks,
+            steps,
+            lr,
+            proto_net=proto_net,
+            proto_projector=proto_projector,
+            data=data,
+        )["mae"]
         print(f"epoch {epoch:>3}  loss {np.mean(losses):.4f}  val mae {val_mae:.4f}")
 
-        # keep the epoch with the lowest validation MAE
         if val_mae < best:
             best = val_mae
-            torch.save({"config": cfg, "seed": seed, "state": model.state_dict()}, path)
+            checkpoint = {
+                "config": cfg,
+                "seed": seed,
+                "state": model.state_dict(),
+            }
+            if proto_net is not None and proto_projector is not None:
+                checkpoint["proto_net"] = proto_net.state_dict()
+                checkpoint["proto_projector"] = proto_projector.state_dict()
+
+            torch.save(checkpoint, path)
+
     print(f"best val mae {best:.4f}, saved to {path}")
     return best
 

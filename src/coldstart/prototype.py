@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+PROTO_TARGET_PARAMS = ("out.weight", "out.bias")
+
 
 class UserTextPrototype(nn.Module):
     """
@@ -48,7 +50,12 @@ class ProtoProjector(nn.Module):
         for name in local_param_names:
             param_numel = named_params[name].numel()
             key = name.replace(".", "_")
-            self.projectors[key] = nn.Linear(proto_dim, param_numel)
+            proj = nn.Linear(proto_dim, param_numel)
+
+            # Initialize weights and biases to zero
+            nn.init.zeros_(proj.weight)
+            nn.init.zeros_(proj.bias)
+            self.projectors[key] = proj
 
     def forward(self, p_u: torch.Tensor, current_params: dict) -> dict[str, torch.Tensor]:
         deltas = {}
