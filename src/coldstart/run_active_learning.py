@@ -1,5 +1,9 @@
+import argparse
+import random
+
 import numpy as np
 import torch
+from scipy.stats import wilcoxon
 
 from coldstart.active_learning import (
     compute_rating_frequencies,
@@ -9,134 +13,92 @@ from coldstart.active_learning import (
     select_text_diversity,
 )
 from coldstart.dataset import Task
-from coldstart.evaluate import load_model
-from coldstart.metrics import mae
-from coldstart.model import adapt, predict
+from coldstart.evaluate import TEST_STATES, load_model, melu_predictor, task_scores
 from coldstart.preprocess import load_movielens, load_tasks
+from coldstart.text import DEFAULT_ENCODER
 
 
-def evaluate_active_learning(model, tasks, steps, lr, k_items, strategy_fn, **strategy_kwargs):
-    device = next(model.parameters()).device
-    model.eval()
-
-    mae_list, mse_list = [], []
-
-    for task in tasks:
-        user_items = task.support_items
-        user_ratings = task.support_ratings
-
-        # Fixed test set
-        q_items = task.query_items
-        q_ratings = task.query_ratings
-
-        if user_items.size(0) <= k_items:
-            idxs = torch.arange(user_items.size(0))
-        else:
-            idxs = strategy_fn(user_items, k_items, **strategy_kwargs, user_id=task.user)
-
-        # Creates a new fake Task with k-size support
-        al_task = Task(
-            user=task.user,
-            support_items=user_items[idxs],
-            support_ratings=user_ratings[idxs],
-            query_items=q_items,
-            query_ratings=q_ratings,
-        )
-
-        # Adapts the model
-        params = adapt(model, al_task, steps, lr, first_order=True)
-
-        # Predicts and compute the error
-        with torch.no_grad():
-            q_users = torch.full_like(q_items, task.user).to(device)
-            q_items = q_items.to(device)
-            q_pred = predict(model, params, q_users, q_items).cpu()
-
-        mae_list.append(mae(q_pred, q_ratings))
-        mse_list.append(torch.nn.functional.mse_loss(q_pred, q_ratings).item())
-
-    return float(np.mean(mae_list)), float(np.sqrt(np.mean(mse_list)))
+def choose_support(task, k_items, strategy_fn, **strategy_kwargs):
+    # the k items come from the support set, the query stays the same for every strategy
+    if task.support_items.size(0) <= k_items:
+        idxs = torch.arange(task.support_items.size(0))
+    else:
+        idxs = strategy_fn(task.support_items, k_items, user_id=task.user, **strategy_kwargs)
+    return Task(
+        user=task.user,
+        support_items=task.support_items[idxs],
+        support_ratings=task.support_ratings[idxs],
+        query_items=task.query_items,
+        query_ratings=task.query_ratings,
+    )
 
 
-def main():
-    # Load dataset with textual embeddings
-    data = load_movielens("data/ml-1m", text_encoder="sentence-transformers/all-MiniLM-L6-v2")
+def evaluate_active_learning(model, tasks, steps, lr, k_items, seed, strategy_fn, **kwargs):
+    # same seed for every strategy, so random choices can be repeated
+    random.seed(seed)
+    torch.manual_seed(seed)
+    al_tasks = [choose_support(task, k_items, strategy_fn, **kwargs) for task in tasks]
+    return task_scores(al_tasks, melu_predictor(model, steps, lr))
 
-    # Move the model to the gpu if available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    ensemble_models = []
-    for i in range(5):
-        # Load the trained models
-        checkpoint_path = f"checkpoints/tuned/melu_seed{i}.pt"
-        model, current_cfg, current_seed = load_model(checkpoint_path, data)
-        ensemble_models.append(model.to(device))
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("checkpoints", nargs="+", help="one checkpoint per seed")
+    parser.add_argument("--states", nargs="+", default=TEST_STATES)
+    parser.add_argument("--k", nargs="+", type=int, default=[1, 3, 5, 10])
+    args = parser.parse_args(argv)
 
-        if i == 0:
-            cfg = current_cfg
-            seed = current_seed
+    cfg = torch.load(args.checkpoints[0], map_location="cpu")["config"]
+    # text diversity needs item texts also when the model does not use them
+    encoder = cfg.get("text_encoder") or DEFAULT_ENCODER
+    data = load_movielens(cfg["data_root"], encoder, cfg.get("text_source", "plot"))
+    runs = [load_model(path, data) for path in args.checkpoints]
+    ensemble_models = [model for model, _, _ in runs]
+    rating_freqs = compute_rating_frequencies(load_tasks(data, "warm_train", runs[0][2]))
 
-    # Arbitrary choice for the "main" model
-    model = ensemble_models[0]
-
-    # Load the training set to compute real probabilities
-    train_tasks = load_tasks(data, "warm_train", seed=seed)
-    dynamic_rating_freqs = compute_rating_frequencies(train_tasks)
-
-    # Load the test set
-    tasks = load_tasks(data, "user_cold", seed=seed)
-
-    k_values = [1, 3, 5, 10]
-    inner_steps = cfg["inner_steps"]
-    inner_lr = cfg["inner_lr"]
-
-    print(f"--- Active Learning on User Cold (Seed: {seed}) ---")
-
-    for k_items in k_values:
-        print(f"\n=== Active Learning (k={k_items}) su User Cold ===")
-
-        # Random test
-        mae_rand, rmse_rand = evaluate_active_learning(
-            model, tasks, inner_steps, inner_lr, k_items, select_random
-        )
-        print(f"Random      -> MAE: {mae_rand:.4f}, RMSE: {rmse_rand:.4f}")
-
-        # Uncertainty test
-        mae_unc, rmse_unc = evaluate_active_learning(
-            model,
-            tasks,
-            inner_steps,
-            inner_lr,
-            k_items,
-            select_ensemble_uncertainty,
-            ensemble_models=ensemble_models,
-        )
-        print(f"Ensemble Uncertainty -> MAE: {mae_unc:.4f}, RMSE: {rmse_unc:.4f}")
-
-        # Expected Model Change Test
-        mae_emc, rmse_emc = evaluate_active_learning(
-            model,
-            tasks,
-            inner_steps,
-            inner_lr,
-            k_items,
-            select_expected_model_change,
-            melu_model=model,
-            rating_freqs=dynamic_rating_freqs,
-        )
-        print(f"Exp. Model Change -> MAE: {mae_emc:.4f}, RMSE: {rmse_emc:.4f}")
-
-        # Text Diversity test
-        mae_div, rmse_div = evaluate_active_learning(
-            model,
-            tasks,
-            inner_steps,
-            inner_lr,
-            k_items,
-            select_text_diversity,
-            text_embeddings=data.text_embeddings,
-        )
-        print(f"Text Diversity   -> MAE: {mae_div:.4f}, RMSE: {rmse_div:.4f}")
+    for state in args.states:
+        print(f"\n{state:<16}{'k':>3}{'mae':>8}{'ndcg@3':>8}{'p':>10}")
+        for k_items in args.k:
+            # per user scores of each strategy, averaged over seeds
+            scores = {}
+            for model, cfg, seed in runs:
+                strategies = {
+                    "random": (select_random, {}),
+                    "uncertainty": (
+                        select_ensemble_uncertainty,
+                        {"ensemble_models": ensemble_models},
+                    ),
+                    "model change": (
+                        select_expected_model_change,
+                        {"melu_model": model, "rating_freqs": rating_freqs},
+                    ),
+                    "text diversity": (
+                        select_text_diversity,
+                        {"text_embeddings": data.text_embeddings},
+                    ),
+                }
+                tasks = load_tasks(data, state, seed)
+                for name, (strategy_fn, kwargs) in strategies.items():
+                    result = evaluate_active_learning(
+                        model,
+                        tasks,
+                        cfg["inner_steps"],
+                        cfg["inner_lr"],
+                        k_items,
+                        seed,
+                        strategy_fn,
+                        **kwargs,
+                    )
+                    scores.setdefault(name, []).append(result)
+            mae = {
+                name: np.mean([r["mae"] for r in results], axis=0)
+                for name, results in scores.items()
+            }
+            for name, results in scores.items():
+                ndcg = np.mean([r["ndcg@3"] for r in results])
+                # two-sided Wilcoxon against random, paired over users
+                p = wilcoxon(mae[name], mae["random"]).pvalue if name != "random" else float("nan")
+                print(f"{name:<16}{k_items:>3}{mae[name].mean():>8.4f}{ndcg:>8.4f}{p:>10.2g}")
 
 
 if __name__ == "__main__":
