@@ -31,6 +31,14 @@ python -m coldstart.compare checkpoints/text_full/melu_seed*.pt --against checkp
 
 `compare` runs a paired Wilcoxon test over test users. Any config value can be changed with `--set`, for example `--set text_encoder=random` for the control with random vectors, or `--set text_encoder=Qwen/Qwen3-Embedding-0.6B` for another encoder.
 
+Active learning chooses the k ratings a new user is asked for. Every strategy picks from the support set of the user and is scored on the same query items. The checkpoints of all seeds also form the committee for the uncertainty strategy:
+
+```bash
+python -m coldstart.run_active_learning checkpoints/tuned/melu_seed*.pt
+```
+
+It prints MAE and nDCG@3 for each state and k, with a paired Wilcoxon test against random choices.
+
 Data is downloaded to `data/ml-1m/` on the first run, from the [MeLU repository](https://github.com/hoyeoplee/MeLU), which extends MovieLens-1M with plots, directors, actors and the cold-start splits. The model is our reimplementation of MeLU, not the original code.
 
 ## Authors
