@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.func import functional_call
 
+# Only the decision layers adapt to each user, as in MeLU
 LOCAL_PARAMS = ("fc1.weight", "fc1.bias", "fc2.weight", "fc2.bias", "out.weight", "out.bias")
 PROTO_TARGET_PARAMS = ("out.weight", "out.bias")
 ID_FIELDS = ("director", "actors")
@@ -25,6 +26,7 @@ class MeLU(nn.Module):
             for name, table in features.items():
                 self.register_buffer(f"{prefix}_{name}", table)
                 size = data.vocab_sizes[name]
+                # multi-valued fields (genre, director, actors) are padded index lists
                 if table.dim() == 2:
                     self.emb[name] = nn.EmbeddingBag(size, emb_dim, mode="mean", padding_idx=0)
                 else:
@@ -72,7 +74,6 @@ def task_inputs(task, device, query=False):
     items = task.query_items if query else task.support_items
     ratings = task.query_ratings if query else task.support_ratings
     items = items.to(device)
-    # See MeLU issue #9: user index buffer workaround
     return torch.full_like(items, task.user), items, ratings.to(device)
 
 
@@ -83,11 +84,14 @@ def predict(model, params, users, items):
 def adapt(
     model, task, steps, lr, first_order=False, proto_net=None, proto_projector=None, data=None
 ):
+    # Fast weights stay in the graph, so the outer update sees through the inner one.
+    # The original code used load_state_dict here, which cut the graph (MeLU issue #9).
     device = next(model.parameters()).device
     users, items, ratings = task_inputs(task, device)
     params = dict(model.named_parameters())
 
     if proto_net is not None and proto_projector is not None and data is not None:
+        # the text prototype of the support ratings shifts the output layer before the inner loop
         supp_text_emb = data.text_embeddings.to(device)[task.support_items.to(device)]
         supp_ratings = task.support_ratings.to(device)
 

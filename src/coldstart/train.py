@@ -27,7 +27,6 @@ def train(cfg, seed, out_dir):
 
     model = build_model(data, cfg).to(device)
 
-    # Inizializzazione condizionale Proto-MAML
     if cfg.get("proto", False):
         text_dim = data.text_embeddings.shape[1]
         proto_dim = cfg.get("proto_dim", 32)
@@ -85,6 +84,7 @@ def train(cfg, seed, out_dir):
         )["mae"]
         print(f"epoch {epoch:>3}  loss {np.mean(losses):.4f}  val mae {val_mae:.4f}")
 
+        # keep the epoch with the lowest validation MAE
         if val_mae < best:
             best = val_mae
             checkpoint = {

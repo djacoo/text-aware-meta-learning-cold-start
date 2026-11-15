@@ -37,6 +37,7 @@ def melu_predictor(model, steps, lr, proto_net=None, proto_projector=None, data=
         proto_projector = getattr(model, "proto_projector", None)
 
     def melu(task):
+        # first order is enough at test time, no meta-gradient is needed
         params = adapt(
             model,
             task,
@@ -67,9 +68,11 @@ def random_ratings(task, generator):
 
 
 def text_knn(task, embeddings):
+    # support ratings weighted by text similarity to each query item, no training
     weights = (embeddings[task.query_items] @ embeddings[task.support_items].T).clamp(min=0)
     total = weights.sum(dim=1)
     pred = weights @ task.support_ratings / total.clamp(min=1e-8)
+    # items without text have no similarity, they fall back to the user mean
     return torch.where(total > 0, pred, task.support_ratings.mean())
 
 
