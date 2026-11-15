@@ -3,8 +3,8 @@ from pathlib import Path
 import torch
 
 from coldstart.dataset import MovieLens, Task
-from coldstart.model import PROTO_TARGET_PARAMS, MeLU, adapt, meta_step
-from coldstart.prototype import ProtoProjector, UserTextPrototype
+from coldstart.model import MeLU, adapt, meta_step
+from coldstart.prototype import PROTO_TARGET_PARAMS, ProtoProjector, UserTextPrototype
 
 
 def test_proto_melu_integration():

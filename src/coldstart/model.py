@@ -3,9 +3,10 @@ import torch.nn.functional as F
 from torch import nn
 from torch.func import functional_call
 
+from coldstart.prototype import PROTO_TARGET_PARAMS
+
 # Only the decision layers adapt to each user, as in MeLU
 LOCAL_PARAMS = ("fc1.weight", "fc1.bias", "fc2.weight", "fc2.bias", "out.weight", "out.bias")
-PROTO_TARGET_PARAMS = ("out.weight", "out.bias")
 ID_FIELDS = ("director", "actors")
 
 
