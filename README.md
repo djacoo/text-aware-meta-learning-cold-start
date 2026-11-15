@@ -13,7 +13,7 @@ pytest
 
 ## Run
 
-One run per seed (we use 0, 1 and 2), with the learning rates of the paper or the ones tuned by `python -m coldstart.grid` on warm validation users:
+One run per seed (we use 0 to 4), with the learning rates of the paper or the ones tuned by `python -m coldstart.grid` on warm validation users:
 
 ```bash
 python -m coldstart.train --seed 0 --out checkpoints/paper
