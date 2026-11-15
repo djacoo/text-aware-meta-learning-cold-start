@@ -5,12 +5,10 @@ import torch.nn.functional as F
 
 from coldstart.model import predict
 
-LOCAL_PARAMS = ("fc1.weight", "fc1.bias", "fc2.weight", "fc2.bias", "out.weight", "out.bias")
-
 
 def compute_rating_frequencies(tasks):
     """
-    Computes the exact normalized distribution of ratings from a list of Tasks.
+    Computes the share of each rating value in a list of tasks.
     """
     all_ratings = []
     for task in tasks:
@@ -22,14 +20,12 @@ def compute_rating_frequencies(tasks):
 
     total = all_ratings.size(0)
     # Map each unique rating to its frequency
-    return {u.item(): (c.item() / total * 100) for u, c in zip(unique_vals, counts, strict=False)}
+    return {u.item(): c.item() / total for u, c in zip(unique_vals, counts, strict=True)}
 
 
 def select_random(all_items, k, **kwargs):
     """
-    Baseline strategy: selects k items completely at random.
-    It serves as the lower-bound baseline to prove that Active Learning actually provides a
-    statistically significant advantage.
+    Baseline strategy: selects k items at random.
     """
     n = all_items.size(0)
     if k >= n:
@@ -71,14 +67,13 @@ def select_expected_model_change(c_items, k, melu_model, user_id, **kwargs):
     if k >= n:
         return torch.arange(n)
 
-    # Uses the dynamically computed frequencies
     rating_freqs = kwargs.get("rating_freqs")
     if rating_freqs is None:
         raise ValueError("Expected Model Change requires 'rating_freqs' kwargs.")
 
     device = next(melu_model.parameters()).device
     params = dict(melu_model.named_parameters())
-    local_params = [params[name] for name in LOCAL_PARAMS]
+    local_params = [params[name] for name in melu_model.local_params]
 
     emc_scores = []
 
@@ -91,7 +86,6 @@ def select_expected_model_change(c_items, k, melu_model, user_id, **kwargs):
         grad_norm = torch.sqrt(sum(torch.norm(g) ** 2 for g in grads)).item()
 
         expected_norm = 0.0
-        # Iterate dynamically over the provided training frequencies
         for y_val, prob in rating_freqs.items():
             scaling_factor = 2.0 * abs(pred.item() - y_val)
             expected_norm += prob * (scaling_factor * grad_norm)
