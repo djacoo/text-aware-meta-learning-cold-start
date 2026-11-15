@@ -1,3 +1,4 @@
+# Tuned MeLU with a text prototype of each user that shifts the output layer before adaptation
 data_root: data/ml-1m
 emb_dim: 32
 hidden: 64
@@ -6,5 +7,6 @@ outer_lr: 1.0e-3
 inner_steps: 5
 meta_batch: 32
 epochs: 30
+text_encoder: BAAI/bge-base-en-v1.5
 proto: true
 proto_dim: 32
