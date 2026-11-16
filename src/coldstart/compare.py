@@ -29,6 +29,13 @@ def main(argv=None):
     parser.add_argument("checkpoints", nargs="+", help="one checkpoint per seed")
     parser.add_argument("--against", nargs="+", required=True, help="checkpoints to compare with")
     args = parser.parse_args(argv)
+    # users are paired only if both sides use the same seeds, hence the same query sets
+    seeds = [
+        sorted(torch.load(p, map_location="cpu")["seed"] for p in paths)
+        for paths in (args.checkpoints, args.against)
+    ]
+    if seeds[0] != seeds[1]:
+        parser.error(f"different seeds: {seeds[0]} against {seeds[1]}")
 
     errors, against = user_errors(args.checkpoints), user_errors(args.against)
     print(f"{'':<16}{'model':>8}{'against':>9}{'p':>10}{'user mean':>11}{'p':>10}")

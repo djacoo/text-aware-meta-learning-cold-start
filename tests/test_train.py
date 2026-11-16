@@ -55,17 +55,22 @@ def test_compare(ml_root, data, tmp_path, capsys):
         "meta_batch": 4,
         "epochs": 1,
     }
-    for seed in (0, 1):
-        train(cfg, seed, tmp_path / str(seed))
-    paths = [str(tmp_path / "0" / "melu_seed0.pt")]
+    train(cfg, 0, tmp_path / "a")
+    train(cfg | {"hidden": 8}, 0, tmp_path / "b")
+    train(cfg, 1, tmp_path / "c")
+    paths = [str(tmp_path / "a" / "melu_seed0.pt")]
 
     errors = compare.user_errors(paths)
     model_errors, mean_errors = errors["user_cold"]
     assert model_errors.shape == mean_errors.shape == (len(load_tasks(data, "user_cold", 0)),)
 
     capsys.readouterr()
-    compare.main(paths + ["--against", str(tmp_path / "1" / "melu_seed1.pt")])
+    compare.main(paths + ["--against", str(tmp_path / "b" / "melu_seed0.pt")])
     assert len(capsys.readouterr().out.splitlines()) == 5
+
+    # different seeds mean different query sets, so users cannot be paired
+    with pytest.raises(SystemExit):
+        compare.main(paths + ["--against", str(tmp_path / "c" / "melu_seed1.pt")])
 
 
 def test_set_changes_config(ml_root, tmp_path):
