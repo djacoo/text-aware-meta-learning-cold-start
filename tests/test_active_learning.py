@@ -1,0 +1,87 @@
+import pytest
+import torch
+
+from coldstart.active_learning import (
+    compute_rating_frequencies,
+    select_ensemble_uncertainty,
+    select_expected_model_change,
+    select_random,
+    select_text_diversity,
+)
+from coldstart.model import MeLU
+from coldstart.preprocess import load_tasks
+from coldstart.run_active_learning import choose_support
+from coldstart.run_active_learning import main as run_main
+from coldstart.train import train
+
+
+@pytest.fixture
+def setup(data):
+    torch.manual_seed(0)
+    models = [MeLU(data, emb_dim=8, hidden=16) for _ in range(2)]
+    tasks = load_tasks(data, "warm_train", seed=0)
+    kwargs = {
+        "ensemble_models": models,
+        "melu_model": models[0],
+        "rating_freqs": compute_rating_frequencies(tasks),
+        "text_embeddings": torch.rand(3, 4),
+    }
+    return tasks, kwargs
+
+
+@pytest.mark.parametrize(
+    "strategy",
+    [
+        select_random,
+        select_ensemble_uncertainty,
+        select_expected_model_change,
+        select_text_diversity,
+    ],
+)
+def test_strategy_picks_k_distinct_items(setup, strategy):
+    tasks, kwargs = setup
+    task = max(tasks, key=lambda t: len(t.support_items))
+    idxs = strategy(task.support_items, 3, user_id=task.user, **kwargs)
+    assert len(set(idxs.tolist())) == 3
+    assert all(0 <= i < len(task.support_items) for i in idxs.tolist())
+
+
+def test_rating_frequencies_sum_to_one(setup):
+    _, kwargs = setup
+    assert sum(kwargs["rating_freqs"].values()) == pytest.approx(1.0)
+
+
+def test_choose_support_keeps_query(setup):
+    tasks, kwargs = setup
+    task = max(tasks, key=lambda t: len(t.support_items))
+    chosen = choose_support(task, 2, select_random)
+    assert len(chosen.support_items) == 2
+    assert torch.equal(chosen.query_items, task.query_items)
+    assert torch.equal(chosen.query_ratings, task.query_ratings)
+    # a support smaller than k is kept whole
+    assert len(choose_support(task, 100, select_random).support_items) == len(task.support_items)
+
+
+def test_run_active_learning(ml_root, tmp_path, capsys):
+    torch.save(torch.rand(3, 4), ml_root / "plots_fake-encoder.pt")
+    cfg = {
+        "data_root": str(ml_root),
+        "emb_dim": 8,
+        "hidden": 16,
+        "inner_lr": 0.01,
+        "outer_lr": 0.01,
+        "inner_steps": 1,
+        "meta_batch": 4,
+        "epochs": 1,
+        "text_encoder": "someone/fake-encoder",
+    }
+    paths = []
+    for seed in (0, 1):
+        train(cfg, seed, tmp_path / str(seed))
+        paths.append(str(tmp_path / str(seed) / f"melu_seed{seed}.pt"))
+
+    capsys.readouterr()
+    run_main(paths + ["--states", "user_cold", "--k", "1", "2"])
+    lines = capsys.readouterr().out.split("\n")
+    # header, then one line per strategy and k
+    assert len([line for line in lines if line.strip()]) == 1 + 4 * 2
