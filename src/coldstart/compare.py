@@ -16,7 +16,7 @@ def user_errors(paths):
     mean = {state: [] for state in TEST_STATES}
     for path in paths:
         model, cfg, seed = load_model(path, data)
-        predictor = melu_predictor(model, cfg["inner_steps"], cfg["inner_lr"])
+        predictor = melu_predictor(model, cfg["inner_steps"], cfg["inner_lr"], data=data)
         for state in TEST_STATES:
             tasks = load_tasks(data, state, seed)
             melu[state].append(task_scores(tasks, predictor)["mae"])

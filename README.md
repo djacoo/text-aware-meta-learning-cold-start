@@ -13,7 +13,7 @@ pytest
 
 ## Run
 
-One run per seed (we use 0, 1 and 2), with the learning rates of the paper or the ones tuned by `python -m coldstart.grid` on warm validation users:
+One run per seed (we use 0 to 4), with the learning rates of the paper or the ones tuned by `python -m coldstart.grid` on warm validation users:
 
 ```bash
 python -m coldstart.train --seed 0 --out checkpoints/paper
@@ -30,6 +30,15 @@ python -m coldstart.compare checkpoints/text_full/melu_seed*.pt --against checkp
 ```
 
 `compare` runs a paired Wilcoxon test over test users. Any config value can be changed with `--set`, for example `--set text_encoder=random` for the control with random vectors, or `--set text_encoder=Qwen/Qwen3-Embedding-0.6B` for another encoder.
+
+The text-based user initialization averages the texts of the movies a user liked and disliked in the support set, and from them shifts the output layer before adaptation, as in Proto-MAML. It starts from zero, so at the beginning of training the model is plain MeLU:
+
+```bash
+python -m coldstart.train --config configs/proto_melu.yaml --seed 0 --out checkpoints/proto
+python -m coldstart.compare checkpoints/proto/proto_melu_seed*.pt --against checkpoints/tuned/melu_seed*.pt
+```
+
+`--set proto=true proto_dim=32` adds it to any text config.
 
 Active learning chooses the k ratings a new user is asked for. Every strategy picks from the support set of the user and is scored on the same query items. The checkpoints of all seeds also form the committee for the uncertainty strategy:
 
