@@ -39,3 +39,7 @@ notes/
 *.synctex.gz
 *.bbl
 *.blg
+*.brf
+*.fls
+*.fdb_latexmk
+paper/*.pdf
