@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.func import functional_call
 
+from coldstart.dataset import Task
 from coldstart.prototype import PROTO_TARGET_PARAMS
 
 # Only the decision layers adapt to each user, as in MeLU
@@ -91,7 +92,9 @@ def adapt(
     users, items, ratings = task_inputs(task, device)
     params = dict(model.named_parameters())
 
-    if proto_net is not None and proto_projector is not None and data is not None:
+    if proto_net is not None and proto_projector is not None:
+        if data is None:
+            raise ValueError("the user prototype needs the item text embeddings, pass data")
         # the text prototype of the support ratings shifts the output layer before the inner loop
         supp_text_emb = data.text_embeddings.to(device)[task.support_items.to(device)]
         supp_ratings = task.support_ratings.to(device)
@@ -144,3 +147,15 @@ def meta_step(
     loss.backward()
     optimizer.step()
     return loss.item()
+
+
+def start_params(model, data=None):
+    # the model a user has before any rating: with a prototype, shifted by an empty support
+    proto_net = getattr(model, "proto_net", None)
+    proto_projector = getattr(model, "proto_projector", None)
+    if proto_net is None or proto_projector is None:
+        return dict(model.named_parameters())
+    empty = Task(0, torch.empty(0, dtype=torch.long), torch.empty(0), None, None)
+    return adapt(
+        model, empty, 0, 0.0, proto_net=proto_net, proto_projector=proto_projector, data=data
+    )

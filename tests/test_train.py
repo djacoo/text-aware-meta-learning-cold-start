@@ -6,6 +6,7 @@ from coldstart import compare
 from coldstart.dataset import Task
 from coldstart.evaluate import (
     evaluate,
+    expand,
     load_model,
     melu_predictor,
     task_scores,
@@ -36,6 +37,7 @@ def test_train_then_evaluate(ml_root, tmp_path, text):
     model, saved_cfg, seed = load_model(tmp_path / "checkpoints" / "melu_seed0.pt", data)
     assert saved_cfg == cfg
     assert seed == 0
+    assert not model.training
 
     scores = evaluate(model, load_tasks(data, "user_cold", seed), steps=1, lr=0.01)
     assert scores["mae"] >= 0
@@ -54,17 +56,26 @@ def test_compare(ml_root, data, tmp_path, capsys):
         "meta_batch": 4,
         "epochs": 1,
     }
-    for seed in (0, 1):
-        train(cfg, seed, tmp_path / str(seed))
-    paths = [str(tmp_path / "0" / "melu_seed0.pt")]
+    train(cfg, 0, tmp_path / "a")
+    train(cfg | {"hidden": 8}, 0, tmp_path / "b")
+    train(cfg, 1, tmp_path / "c")
+    paths = [str(tmp_path / "a" / "melu_seed0.pt")]
 
     errors = compare.user_errors(paths)
     model_errors, mean_errors = errors["user_cold"]
     assert model_errors.shape == mean_errors.shape == (len(load_tasks(data, "user_cold", 0)),)
 
     capsys.readouterr()
-    compare.main(paths + ["--against", str(tmp_path / "1" / "melu_seed1.pt")])
+    compare.main(paths + ["--against", str(tmp_path / "b" / "melu_seed0.pt")])
     assert len(capsys.readouterr().out.splitlines()) == 5
+
+    # patterns work as on Windows, where the shell does not expand them
+    compare.main([str(tmp_path / "a" / "melu_seed*.pt"), "--against", str(tmp_path / "b" / "*.pt")])
+    assert len(capsys.readouterr().out.splitlines()) == 5
+
+    # different seeds mean different query sets, so users cannot be paired
+    with pytest.raises(SystemExit):
+        compare.main(paths + ["--against", str(tmp_path / "c" / "melu_seed1.pt")])
 
 
 def test_set_changes_config(ml_root, tmp_path):
@@ -117,3 +128,10 @@ def test_compare_uses_prototype(ml_root, tmp_path):
     tasks = load_tasks(data, "user_cold", 0)
     expected = task_scores(tasks, melu_predictor(model, 1, 0.01, data=data))["mae"]
     assert np.allclose(compare.user_errors([path])["user_cold"][0], expected)
+
+
+def test_expand_patterns(tmp_path):
+    for name in ("melu_seed1.pt", "melu_seed0.pt", "other.pt"):
+        (tmp_path / name).touch()
+    paths = expand([str(tmp_path / "melu_seed*.pt"), "missing.pt"])
+    assert paths == [str(tmp_path / "melu_seed0.pt"), str(tmp_path / "melu_seed1.pt"), "missing.pt"]
