@@ -99,6 +99,8 @@ def load_model(path, data, device="cpu"):
         model.proto_net = None
         model.proto_projector = None
 
+    # loaded models are only used for inference, so dropout stays off
+    model.eval()
     return model, cfg, checkpoint["seed"]
 
 

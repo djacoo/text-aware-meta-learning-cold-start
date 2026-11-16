@@ -36,6 +36,7 @@ def test_train_then_evaluate(ml_root, tmp_path, text):
     model, saved_cfg, seed = load_model(tmp_path / "checkpoints" / "melu_seed0.pt", data)
     assert saved_cfg == cfg
     assert seed == 0
+    assert not model.training
 
     scores = evaluate(model, load_tasks(data, "user_cold", seed), steps=1, lr=0.01)
     assert scores["mae"] >= 0
