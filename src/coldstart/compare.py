@@ -4,7 +4,14 @@ import numpy as np
 import torch
 from scipy.stats import wilcoxon
 
-from coldstart.evaluate import TEST_STATES, load_model, melu_predictor, task_scores, user_mean
+from coldstart.evaluate import (
+    TEST_STATES,
+    expand,
+    load_model,
+    melu_predictor,
+    task_scores,
+    user_mean,
+)
 from coldstart.preprocess import load_movielens, load_tasks
 
 
@@ -29,6 +36,7 @@ def main(argv=None):
     parser.add_argument("checkpoints", nargs="+", help="one checkpoint per seed")
     parser.add_argument("--against", nargs="+", required=True, help="checkpoints to compare with")
     args = parser.parse_args(argv)
+    args.checkpoints, args.against = expand(args.checkpoints), expand(args.against)
     # users are paired only if both sides use the same seeds, hence the same query sets
     seeds = [
         sorted(torch.load(p, map_location="cpu")["seed"] for p in paths)

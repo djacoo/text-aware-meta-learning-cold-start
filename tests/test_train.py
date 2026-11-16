@@ -6,6 +6,7 @@ from coldstart import compare
 from coldstart.dataset import Task
 from coldstart.evaluate import (
     evaluate,
+    expand,
     load_model,
     melu_predictor,
     task_scores,
@@ -68,6 +69,10 @@ def test_compare(ml_root, data, tmp_path, capsys):
     compare.main(paths + ["--against", str(tmp_path / "b" / "melu_seed0.pt")])
     assert len(capsys.readouterr().out.splitlines()) == 5
 
+    # patterns work as on Windows, where the shell does not expand them
+    compare.main([str(tmp_path / "a" / "melu_seed*.pt"), "--against", str(tmp_path / "b" / "*.pt")])
+    assert len(capsys.readouterr().out.splitlines()) == 5
+
     # different seeds mean different query sets, so users cannot be paired
     with pytest.raises(SystemExit):
         compare.main(paths + ["--against", str(tmp_path / "c" / "melu_seed1.pt")])
@@ -123,3 +128,10 @@ def test_compare_uses_prototype(ml_root, tmp_path):
     tasks = load_tasks(data, "user_cold", 0)
     expected = task_scores(tasks, melu_predictor(model, 1, 0.01, data=data))["mae"]
     assert np.allclose(compare.user_errors([path])["user_cold"][0], expected)
+
+
+def test_expand_patterns(tmp_path):
+    for name in ("melu_seed1.pt", "melu_seed0.pt", "other.pt"):
+        (tmp_path / name).touch()
+    paths = expand([str(tmp_path / "melu_seed*.pt"), "missing.pt"])
+    assert paths == [str(tmp_path / "melu_seed0.pt"), str(tmp_path / "melu_seed1.pt"), "missing.pt"]

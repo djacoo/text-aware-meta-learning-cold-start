@@ -1,4 +1,5 @@
 import argparse
+import glob
 from functools import partial
 
 import numpy as np
@@ -104,10 +105,16 @@ def load_model(path, data, device="cpu"):
     return model, cfg, checkpoint["seed"]
 
 
-def main():
+def expand(paths):
+    # cmd and PowerShell on Windows pass "*" as it is, so patterns are expanded here
+    return [match for path in paths for match in sorted(glob.glob(path)) or [path]]
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("checkpoints", nargs="+", help="one checkpoint per seed")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    args.checkpoints = expand(args.checkpoints)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     cfg = torch.load(args.checkpoints[0], map_location="cpu")["config"]

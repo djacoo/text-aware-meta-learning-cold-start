@@ -13,7 +13,7 @@ from coldstart.active_learning import (
     select_text_diversity,
 )
 from coldstart.dataset import Task
-from coldstart.evaluate import TEST_STATES, load_model, melu_predictor, task_scores
+from coldstart.evaluate import TEST_STATES, expand, load_model, melu_predictor, task_scores
 from coldstart.preprocess import load_movielens, load_tasks
 from coldstart.text import DEFAULT_ENCODER
 
@@ -48,6 +48,7 @@ def main(argv=None):
     parser.add_argument("--states", nargs="+", default=TEST_STATES)
     parser.add_argument("--k", nargs="+", type=int, default=[1, 3, 5, 10])
     args = parser.parse_args(argv)
+    args.checkpoints = expand(args.checkpoints)
 
     cfg = torch.load(args.checkpoints[0], map_location="cpu")["config"]
     # text diversity needs item texts also when the model does not use them
