@@ -3,6 +3,8 @@ import torch.nn.functional as F
 from torch import nn
 from torch.func import functional_call
 
+from coldstart.prototype import PROTO_TARGET_PARAMS
+
 # Only the decision layers adapt to each user, as in MeLU
 LOCAL_PARAMS = ("fc1.weight", "fc1.bias", "fc2.weight", "fc2.bias", "out.weight", "out.bias")
 ID_FIELDS = ("director", "actors")
@@ -80,11 +82,27 @@ def predict(model, params, users, items):
     return functional_call(model, params, (users, items))
 
 
-def adapt(model, task, steps, lr, first_order=False):
+def adapt(
+    model, task, steps, lr, first_order=False, proto_net=None, proto_projector=None, data=None
+):
     # Fast weights stay in the graph, so the outer update sees through the inner one.
     # The original code used load_state_dict here, which cut the graph (MeLU issue #9).
-    users, items, ratings = task_inputs(task, next(model.parameters()).device)
+    device = next(model.parameters()).device
+    users, items, ratings = task_inputs(task, device)
     params = dict(model.named_parameters())
+
+    if proto_net is not None and proto_projector is not None and data is not None:
+        # the text prototype of the support ratings shifts the output layer before the inner loop
+        supp_text_emb = data.text_embeddings.to(device)[task.support_items.to(device)]
+        supp_ratings = task.support_ratings.to(device)
+
+        p_u = proto_net(supp_text_emb, supp_ratings)
+        deltas = proto_projector(p_u, params)
+
+        for name in PROTO_TARGET_PARAMS:
+            if name in deltas:
+                params[name] = params[name] + deltas[name]
+
     for _ in range(steps):
         loss = F.mse_loss(predict(model, params, users, items), ratings)
         local = [params[name] for name in model.local_params]
@@ -94,13 +112,33 @@ def adapt(model, task, steps, lr, first_order=False):
     return params
 
 
-def meta_step(model, tasks, optimizer, steps, lr, first_order=False):
+def meta_step(
+    model,
+    tasks,
+    optimizer,
+    steps,
+    lr,
+    first_order=False,
+    proto_net=None,
+    proto_projector=None,
+    data=None,
+):
     device = next(model.parameters()).device
     losses = []
     for task in tasks:
-        params = adapt(model, task, steps, lr, first_order)
+        params = adapt(
+            model,
+            task,
+            steps,
+            lr,
+            first_order,
+            proto_net=proto_net,
+            proto_projector=proto_projector,
+            data=data,
+        )
         users, items, ratings = task_inputs(task, device, query=True)
         losses.append(F.mse_loss(predict(model, params, users, items), ratings))
+
     loss = torch.stack(losses).mean()
     optimizer.zero_grad()
     loss.backward()

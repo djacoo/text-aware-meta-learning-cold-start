@@ -1,9 +1,17 @@
+import numpy as np
 import pytest
 import torch
 
 from coldstart import compare
 from coldstart.dataset import Task
-from coldstart.evaluate import evaluate, load_model, text_knn, user_mean
+from coldstart.evaluate import (
+    evaluate,
+    load_model,
+    melu_predictor,
+    task_scores,
+    text_knn,
+    user_mean,
+)
 from coldstart.preprocess import load_movielens, load_tasks
 from coldstart.train import main as train_main
 from coldstart.train import train
@@ -84,3 +92,28 @@ def test_text_knn():
     task = Task(0, torch.tensor([0, 1]), torch.tensor([5.0, 1.0]), torch.tensor([2, 3]), None)
     # item 2 matches item 0 only, item 3 has no text and gets the user mean
     assert text_knn(task, embeddings).tolist() == [5.0, 3.0]
+
+
+def test_compare_uses_prototype(ml_root, tmp_path):
+    torch.save(torch.rand(3, 4), ml_root / "plots_fake-encoder.pt")
+    cfg = {
+        "data_root": str(ml_root),
+        "emb_dim": 8,
+        "hidden": 16,
+        "inner_lr": 0.01,
+        "outer_lr": 0.01,
+        "inner_steps": 1,
+        "meta_batch": 4,
+        "epochs": 2,
+        "text_encoder": "someone/fake-encoder",
+        "proto": True,
+        "proto_dim": 4,
+    }
+    train(cfg, seed=0, out_dir=tmp_path)
+    path = str(tmp_path / "proto_melu_seed0.pt")
+
+    data = load_movielens(ml_root, cfg["text_encoder"])
+    model, _, _ = load_model(path, data)
+    tasks = load_tasks(data, "user_cold", 0)
+    expected = task_scores(tasks, melu_predictor(model, 1, 0.01, data=data))["mae"]
+    assert np.allclose(compare.user_errors([path])["user_cold"][0], expected)
