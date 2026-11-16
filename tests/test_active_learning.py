@@ -8,9 +8,10 @@ from coldstart.active_learning import (
     select_random,
     select_text_diversity,
 )
+from coldstart.evaluate import load_model, melu_predictor, task_scores
 from coldstart.model import MeLU
-from coldstart.preprocess import load_tasks
-from coldstart.run_active_learning import choose_support
+from coldstart.preprocess import load_movielens, load_tasks
+from coldstart.run_active_learning import choose_support, evaluate_active_learning
 from coldstart.run_active_learning import main as run_main
 from coldstart.train import train
 
@@ -85,3 +86,31 @@ def test_run_active_learning(ml_root, tmp_path, capsys):
     lines = capsys.readouterr().out.split("\n")
     # header, then one line per strategy and k
     assert len([line for line in lines if line.strip()]) == 1 + 4 * 2
+
+
+def test_active_learning_uses_prototype(ml_root, tmp_path):
+    torch.save(torch.rand(3, 4), ml_root / "plots_fake-encoder.pt")
+    cfg = {
+        "data_root": str(ml_root),
+        "emb_dim": 8,
+        "hidden": 16,
+        "inner_lr": 0.01,
+        "outer_lr": 0.01,
+        "inner_steps": 1,
+        "meta_batch": 4,
+        "epochs": 2,
+        "text_encoder": "someone/fake-encoder",
+        "proto": True,
+        "proto_dim": 4,
+    }
+    train(cfg, seed=0, out_dir=tmp_path)
+    data = load_movielens(ml_root, cfg["text_encoder"])
+    model, _, _ = load_model(tmp_path / "proto_melu_seed0.pt", data)
+    tasks = load_tasks(data, "user_cold", 0)
+
+    # with k above every support size, active learning must score like plain evaluation
+    expected = task_scores(tasks, melu_predictor(model, 1, 0.01, data=data))["mae"]
+    result = evaluate_active_learning(model, tasks, 1, 0.01, 100, 0, data, select_random)
+    assert result["mae"] == pytest.approx(expected)
+    with pytest.raises(ValueError):
+        melu_predictor(model, 1, 0.01)(tasks[0])

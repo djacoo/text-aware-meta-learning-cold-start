@@ -91,7 +91,9 @@ def adapt(
     users, items, ratings = task_inputs(task, device)
     params = dict(model.named_parameters())
 
-    if proto_net is not None and proto_projector is not None and data is not None:
+    if proto_net is not None and proto_projector is not None:
+        if data is None:
+            raise ValueError("the user prototype needs the item text embeddings, pass data")
         # the text prototype of the support ratings shifts the output layer before the inner loop
         supp_text_emb = data.text_embeddings.to(device)[task.support_items.to(device)]
         supp_ratings = task.support_ratings.to(device)

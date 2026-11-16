@@ -33,12 +33,13 @@ def choose_support(task, k_items, strategy_fn, **strategy_kwargs):
     )
 
 
-def evaluate_active_learning(model, tasks, steps, lr, k_items, seed, strategy_fn, **kwargs):
+def evaluate_active_learning(model, tasks, steps, lr, k_items, seed, data, strategy_fn, **kwargs):
     # same seed for every strategy, so random choices can be repeated
     random.seed(seed)
     torch.manual_seed(seed)
     al_tasks = [choose_support(task, k_items, strategy_fn, **kwargs) for task in tasks]
-    return task_scores(al_tasks, melu_predictor(model, steps, lr))
+    # a proto model adapts with its user prototype, the choice itself uses the shared start
+    return task_scores(al_tasks, melu_predictor(model, steps, lr, data=data))
 
 
 def main(argv=None):
@@ -86,6 +87,7 @@ def main(argv=None):
                         cfg["inner_lr"],
                         k_items,
                         seed,
+                        data,
                         strategy_fn,
                         **kwargs,
                     )
