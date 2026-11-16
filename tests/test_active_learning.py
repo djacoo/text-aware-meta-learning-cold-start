@@ -85,9 +85,11 @@ def test_run_active_learning(ml_root, tmp_path, capsys):
 
     capsys.readouterr()
     run_main(paths + ["--states", "user_cold", "--k", "1", "2"])
-    lines = capsys.readouterr().out.split("\n")
+    lines = [line for line in capsys.readouterr().out.split("\n") if line.strip()]
     # header, then one line per strategy and k
-    assert len([line for line in lines if line.strip()]) == 1 + 4 * 2
+    assert len(lines) == 1 + 4 * 2
+    assert lines[0].split()[-1] == "choose"
+    assert all(0 <= float(line.split()[-1]) <= 1 for line in lines[1:])
 
 
 def test_active_learning_uses_prototype(ml_root, tmp_path):

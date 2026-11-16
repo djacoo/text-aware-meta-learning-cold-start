@@ -59,7 +59,7 @@ def main(argv=None):
     rating_freqs = compute_rating_frequencies(load_tasks(data, "warm_train", runs[0][2]))
 
     for state in args.states:
-        print(f"\n{state:<16}{'k':>3}{'mae':>8}{'ndcg@3':>8}{'p':>10}")
+        print(f"\n{state:<16}{'k':>3}{'mae':>8}{'ndcg@3':>8}{'p':>10}{'choose':>8}")
         for k_items in args.k:
             # per user scores of each strategy, averaged over seeds
             scores = {}
@@ -93,6 +93,8 @@ def main(argv=None):
                         **kwargs,
                     )
                     scores.setdefault(name, []).append(result)
+            # share of users with more than k support items, the others give the same answer
+            choose = np.mean([len(task.support_items) > k_items for task in tasks])
             mae = {
                 name: np.mean([r["mae"] for r in results], axis=0)
                 for name, results in scores.items()
@@ -101,7 +103,9 @@ def main(argv=None):
                 ndcg = np.mean([r["ndcg@3"] for r in results])
                 # two-sided Wilcoxon against random, paired over users
                 p = wilcoxon(mae[name], mae["random"]).pvalue if name != "random" else float("nan")
-                print(f"{name:<16}{k_items:>3}{mae[name].mean():>8.4f}{ndcg:>8.4f}{p:>10.2g}")
+                print(
+                    f"{name:<16}{k_items:>3}{mae[name].mean():>8.4f}{ndcg:>8.4f}{p:>10.2g}{choose:>8.2f}"
+                )
 
 
 if __name__ == "__main__":
