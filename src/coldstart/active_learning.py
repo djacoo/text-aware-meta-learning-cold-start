@@ -109,6 +109,7 @@ def select_text_diversity(all_items, k, text_embeddings, **kwargs):
         raise ValueError("Text embeddings are missing. Load MovieLens with text_encoder!")
 
     candidates_emb = text_embeddings[all_items]
+    has_text = candidates_emb.norm(dim=1) > 0
 
     selected_idx = [random.randint(0, n - 1)]
     unselected_idx = list(range(n))
@@ -124,7 +125,8 @@ def select_text_diversity(all_items, k, text_embeddings, **kwargs):
 
             # Cosine distance
             sims = F.cosine_similarity(cand_tensor, sel_tensor)
-            min_dist = torch.min(1.0 - sims).item()
+            # a film without text has a zero vector, which would look farthest from everything
+            min_dist = torch.min(1.0 - sims).item() if has_text[cand] else 0.0
 
             if min_dist > max_min_dist:
                 max_min_dist = min_dist

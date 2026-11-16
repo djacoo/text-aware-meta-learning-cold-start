@@ -1,3 +1,5 @@
+import random
+
 import pytest
 import torch
 
@@ -114,3 +116,13 @@ def test_active_learning_uses_prototype(ml_root, tmp_path):
     assert result["mae"] == pytest.approx(expected)
     with pytest.raises(ValueError):
         melu_predictor(model, 1, 0.01)(tasks[0])
+
+
+def test_text_diversity_picks_films_without_text_last():
+    embeddings = torch.tensor([[1.0, 0.0], [0.9, 0.1], [0.0, 1.0], [0.0, 0.0]])
+    items = torch.arange(4)
+    for seed in range(10):
+        random.seed(seed)
+        picked = select_text_diversity(items, 3, embeddings).tolist()
+        # after the random first pick, the film without text is never preferred
+        assert 3 not in picked[1:]
