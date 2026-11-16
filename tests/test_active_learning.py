@@ -1,8 +1,10 @@
 import random
 
+import numpy as np
 import pytest
 import torch
 
+from coldstart import active_learning
 from coldstart.active_learning import (
     compute_rating_frequencies,
     select_ensemble_uncertainty,
@@ -89,10 +91,14 @@ def test_run_active_learning(ml_root, tmp_path, capsys):
     # header, then one line per strategy and k
     assert len(lines) == 1 + 4 * 2
     assert lines[0].split()[-1] == "choose"
-    assert all(0 <= float(line.split()[-1]) <= 1 for line in lines[1:])
+    tasks = load_tasks(load_movielens(ml_root, cfg["text_encoder"]), "user_cold", 0)
+    for line in lines[1:]:
+        k = int(line.split()[-5])
+        share = np.mean([len(task.support_items) > k for task in tasks])
+        assert line.split()[-1] == f"{share:.2f}"
 
 
-def test_active_learning_uses_prototype(ml_root, tmp_path):
+def test_active_learning_uses_prototype(ml_root, tmp_path, monkeypatch):
     torch.save(torch.rand(3, 4), ml_root / "plots_fake-encoder.pt")
     cfg = {
         "data_root": str(ml_root),
@@ -126,8 +132,14 @@ def test_active_learning_uses_prototype(ml_root, tmp_path):
     task = max(tasks, key=lambda t: len(t.support_items))
     kwargs = {"ensemble_models": [model, model], "melu_model": model, "data": data}
     kwargs["rating_freqs"] = compute_rating_frequencies(tasks)
+    used = []
+    monkeypatch.setattr(
+        active_learning, "start_params", lambda m, d: used.append(d) or start_params(m, d)
+    )
     for strategy in (select_ensemble_uncertainty, select_expected_model_change):
         assert len(strategy(task.support_items, 2, user_id=task.user, **kwargs)) == 2
+    # both strategies score with the zero-rating model, given the text data
+    assert len(used) == 3 and all(d is data for d in used)
 
 
 def test_text_diversity_picks_films_without_text_last():
