@@ -3,7 +3,7 @@ import random
 import torch
 import torch.nn.functional as F
 
-from coldstart.model import predict
+from coldstart.model import predict, start_params
 
 
 def compute_rating_frequencies(tasks):
@@ -33,7 +33,7 @@ def select_random(all_items, k, **kwargs):
     return torch.randperm(n)[:k]
 
 
-def select_ensemble_uncertainty(c_items, k, ensemble_models, user_id, **kwargs):
+def select_ensemble_uncertainty(c_items, k, ensemble_models, user_id, data=None, **kwargs):
     """
     Selects k items where the variance among 5 trained models is the highest.
     """
@@ -49,7 +49,7 @@ def select_ensemble_uncertainty(c_items, k, ensemble_models, user_id, **kwargs):
     with torch.no_grad():
         for model in ensemble_models:
             model.eval()
-            params = dict(model.named_parameters())
+            params = start_params(model, data)
             preds.append(predict(model, params, users_t, items_t))
 
     preds_tensor = torch.stack(preds)
@@ -59,7 +59,7 @@ def select_ensemble_uncertainty(c_items, k, ensemble_models, user_id, **kwargs):
     return top_k_indices.cpu()
 
 
-def select_expected_model_change(c_items, k, melu_model, user_id, **kwargs):
+def select_expected_model_change(c_items, k, melu_model, user_id, data=None, **kwargs):
     """
     Calculates the Expected Gradient Length (EGL) for each candidate.
     """
@@ -72,7 +72,7 @@ def select_expected_model_change(c_items, k, melu_model, user_id, **kwargs):
         raise ValueError("Expected Model Change requires 'rating_freqs' kwargs.")
 
     device = next(melu_model.parameters()).device
-    params = dict(melu_model.named_parameters())
+    params = start_params(melu_model, data)
     local_params = [params[name] for name in melu_model.local_params]
 
     emc_scores = []

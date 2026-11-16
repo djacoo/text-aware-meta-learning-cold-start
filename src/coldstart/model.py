@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.func import functional_call
 
+from coldstart.dataset import Task
 from coldstart.prototype import PROTO_TARGET_PARAMS
 
 # Only the decision layers adapt to each user, as in MeLU
@@ -146,3 +147,15 @@ def meta_step(
     loss.backward()
     optimizer.step()
     return loss.item()
+
+
+def start_params(model, data=None):
+    # the model a user has before any rating: with a prototype, shifted by an empty support
+    proto_net = getattr(model, "proto_net", None)
+    proto_projector = getattr(model, "proto_projector", None)
+    if proto_net is None or proto_projector is None:
+        return dict(model.named_parameters())
+    empty = Task(0, torch.empty(0, dtype=torch.long), torch.empty(0), None, None)
+    return adapt(
+        model, empty, 0, 0.0, proto_net=proto_net, proto_projector=proto_projector, data=data
+    )

@@ -11,7 +11,7 @@ from coldstart.active_learning import (
     select_text_diversity,
 )
 from coldstart.evaluate import load_model, melu_predictor, task_scores
-from coldstart.model import MeLU
+from coldstart.model import MeLU, start_params
 from coldstart.preprocess import load_movielens, load_tasks
 from coldstart.run_active_learning import choose_support, evaluate_active_learning
 from coldstart.run_active_learning import main as run_main
@@ -118,6 +118,16 @@ def test_active_learning_uses_prototype(ml_root, tmp_path):
     assert result["mae"] == pytest.approx(expected)
     with pytest.raises(ValueError):
         melu_predictor(model, 1, 0.01)(tasks[0])
+
+    # before any rating a proto model is already shifted by the empty prototype
+    start, shared = start_params(model, data), dict(model.named_parameters())
+    assert not torch.equal(start["out.weight"], shared["out.weight"])
+    assert torch.equal(start["fc1.weight"], shared["fc1.weight"])
+    task = max(tasks, key=lambda t: len(t.support_items))
+    kwargs = {"ensemble_models": [model, model], "melu_model": model, "data": data}
+    kwargs["rating_freqs"] = compute_rating_frequencies(tasks)
+    for strategy in (select_ensemble_uncertainty, select_expected_model_change):
+        assert len(strategy(task.support_items, 2, user_id=task.user, **kwargs)) == 2
 
 
 def test_text_diversity_picks_films_without_text_last():
