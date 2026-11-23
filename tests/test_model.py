@@ -114,3 +114,14 @@ def test_meta_step_lowers_query_loss():
     for _ in range(20):
         meta_step(model, [task], optimizer, steps=1, lr=0.01)
     assert query_loss(model, adapt(model, task, 1, 0.01), task).item() < start
+
+
+def test_model_without_user_fields():
+    # Amazon has no user profile, users are only modelled by adaptation
+    data = fake_data()
+    data.user_features = {}
+    model = MeLU(data, emb_dim=8, hidden=16, text="concat")
+    assert model.fc1.in_features == (4 + 1) * 8
+    params = adapt(model, fake_task(), steps=1, lr=0.01)
+    pred = predict(model, params, torch.full((5,), 3), torch.arange(5))
+    assert pred.shape == (5,)
