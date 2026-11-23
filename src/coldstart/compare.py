@@ -8,7 +8,7 @@ from coldstart.evaluate import (
     TEST_STATES,
     expand,
     load_model,
-    melu_predictor,
+    predictor,
     task_scores,
     user_mean,
 )
@@ -23,10 +23,10 @@ def user_errors(paths):
     mean = {state: [] for state in TEST_STATES}
     for path in paths:
         model, cfg, seed = load_model(path, data)
-        predictor = melu_predictor(model, cfg["inner_steps"], cfg["inner_lr"], data=data)
+        predict = predictor(model, cfg, data)
         for state in TEST_STATES:
             tasks = load_tasks(data, state, seed)
-            melu[state].append(task_scores(tasks, predictor)["mae"])
+            melu[state].append(task_scores(tasks, predict)["mae"])
             mean[state].append(task_scores(tasks, user_mean)["mae"])
     return {state: (np.mean(melu[state], axis=0), np.mean(mean[state], axis=0)) for state in melu}
 

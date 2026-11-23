@@ -6,9 +6,10 @@ import numpy as np
 import torch
 import yaml
 
-from coldstart.evaluate import evaluate
+from coldstart.evaluate import evaluate, score
 from coldstart.model import build_model, meta_step
 from coldstart.preprocess import load_data, load_tasks
+from coldstart.protonet import ProtoNet, proto_step, protonet_predictor
 from coldstart.prototype import PROTO_TARGET_PARAMS, ProtoProjector, UserTextPrototype
 
 
@@ -25,7 +26,12 @@ def train(cfg, seed, out_dir):
     train_tasks = load_tasks(data, "warm_train", seed)
     val_tasks = load_tasks(data, "warm_val", seed)
 
-    model = build_model(data, cfg).to(device)
+    protonet = cfg.get("model") == "protonet"
+    if protonet:
+        text, id_dropout = cfg.get("text", "none"), cfg.get("id_dropout", 0.0)
+        model = ProtoNet(data, cfg["emb_dim"], cfg["hidden"], text, id_dropout).to(device)
+    else:
+        model = build_model(data, cfg).to(device)
 
     if cfg.get("proto", False):
         text_dim = data.text_embeddings.shape[1]
@@ -45,10 +51,11 @@ def train(cfg, seed, out_dir):
         params = model.parameters()
 
     optimizer = torch.optim.Adam(params, lr=cfg["outer_lr"])
-    steps, lr, batch = cfg["inner_steps"], cfg["inner_lr"], cfg["meta_batch"]
+    steps, lr, batch = cfg.get("inner_steps"), cfg.get("inner_lr"), cfg["meta_batch"]
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"proto_melu_seed{seed}.pt" if cfg.get("proto", False) else f"melu_seed{seed}.pt"
+    name = "protonet" if protonet else "proto_melu" if cfg.get("proto", False) else "melu"
+    filename = f"{name}_seed{seed}.pt"
     path = out_dir / filename
     best = float("inf")
 
@@ -59,6 +66,16 @@ def train(cfg, seed, out_dir):
             proto_projector.train()
 
         random.shuffle(train_tasks)
+        if protonet:
+            batches = range(0, len(train_tasks), batch)
+            losses = [proto_step(model, train_tasks[i : i + batch], optimizer) for i in batches]
+            val_mae = score(val_tasks, protonet_predictor(model))["mae"]
+            print(f"epoch {epoch:>3}  loss {np.mean(losses):.4f}  val mae {val_mae:.4f}")
+            if val_mae < best:
+                best = val_mae
+                torch.save({"config": cfg, "seed": seed, "state": model.state_dict()}, path)
+            continue
+
         losses = [
             meta_step(
                 model,

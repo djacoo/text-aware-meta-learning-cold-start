@@ -8,6 +8,7 @@ import torch
 from coldstart.metrics import mae, ndcg_at_k
 from coldstart.model import adapt, build_model, predict
 from coldstart.preprocess import load_data, load_tasks
+from coldstart.protonet import ProtoNet, protonet_predictor
 from coldstart.prototype import PROTO_TARGET_PARAMS, ProtoProjector, UserTextPrototype
 
 TEST_STATES = ("warm_test", "user_cold", "item_cold", "user_item_cold")
@@ -56,6 +57,12 @@ def melu_predictor(model, steps, lr, proto_net=None, proto_projector=None, data=
     return melu
 
 
+def predictor(model, cfg, data):
+    if cfg.get("model") == "protonet":
+        return protonet_predictor(model)
+    return melu_predictor(model, cfg["inner_steps"], cfg["inner_lr"], data=data)
+
+
 def evaluate(model, tasks, steps, lr, proto_net=None, proto_projector=None, data=None):
     return score(tasks, melu_predictor(model, steps, lr, proto_net, proto_projector, data))
 
@@ -80,6 +87,11 @@ def text_knn(task, embeddings):
 def load_model(path, data, device="cpu"):
     checkpoint = torch.load(path, map_location=device)
     cfg = checkpoint["config"]
+    if cfg.get("model") == "protonet":
+        text, id_dropout = cfg.get("text", "none"), cfg.get("id_dropout", 0.0)
+        model = ProtoNet(data, cfg["emb_dim"], cfg["hidden"], text, id_dropout).to(device)
+        model.load_state_dict(checkpoint["state"])
+        return model.eval(), cfg, checkpoint["seed"]
     model = build_model(data, cfg).to(device)
     model.load_state_dict(checkpoint["state"])
 
@@ -120,7 +132,7 @@ def main(argv=None):
     cfg = torch.load(args.checkpoints[0], map_location="cpu")["config"]
     data = load_data(cfg["data_root"], cfg.get("text_encoder"), cfg.get("text_source", "plot"))
 
-    methods = ("melu", "user mean", "random")
+    methods = ("model", "user mean", "random")
     if data.text_embeddings is not None:
         methods += ("text knn",)
     results = {m: {s: {name: [] for name in METRICS} for s in TEST_STATES} for m in methods}
@@ -131,13 +143,7 @@ def main(argv=None):
         for state in TEST_STATES:
             tasks = load_tasks(data, state, seed)
             scores = {
-                "melu": evaluate(
-                    model,
-                    tasks,
-                    cfg["inner_steps"],
-                    cfg["inner_lr"],
-                    data=data,
-                ),
+                "model": score(tasks, predictor(model, cfg, data)),
                 "user mean": score(tasks, user_mean),
                 "random": score(tasks, partial(random_ratings, generator=generator)),
             }
