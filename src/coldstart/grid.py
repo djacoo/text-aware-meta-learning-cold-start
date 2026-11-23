@@ -2,6 +2,7 @@ import argparse
 import contextlib
 import itertools
 import os
+from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -18,11 +19,11 @@ GRID = {
 }
 
 
-def run(cfg):
+def run(cfg, out):
     torch.set_num_threads(2)
     name = "_".join(f"{key}{cfg[key]:g}" for key in GRID)
     with open(os.devnull, "w") as quiet, contextlib.redirect_stdout(quiet):
-        best = train(cfg, seed=0, out_dir=Path("checkpoints/grid") / name)
+        best = train(cfg, seed=0, out_dir=Path(out) / name)
     return best, cfg
 
 
@@ -30,6 +31,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/melu.yaml")
     parser.add_argument("--jobs", type=int, default=4)
+    parser.add_argument("--out", default="checkpoints/grid")
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -38,7 +40,7 @@ def main():
         base | dict(zip(GRID, values, strict=True)) for values in itertools.product(*GRID.values())
     ]
     with Pool(args.jobs) as pool:
-        results = pool.map(run, configs)
+        results = pool.map(partial(run, out=args.out), configs)
 
     for best, cfg in sorted(results, key=lambda result: result[0]):
         print(f"val mae {best:.4f}  " + "  ".join(f"{key} {cfg[key]:g}" for key in GRID))

@@ -1,0 +1,9 @@
+# MeLU with the values of the paper, on Amazon Movies & TV
+data_root: data/amazon
+emb_dim: 32
+hidden: 64
+inner_lr: 5.0e-6
+outer_lr: 5.0e-5
+inner_steps: 1
+meta_batch: 32
+epochs: 30
