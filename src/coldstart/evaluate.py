@@ -7,7 +7,7 @@ import torch
 
 from coldstart.metrics import mae, ndcg_at_k
 from coldstart.model import adapt, build_model, predict
-from coldstart.preprocess import load_movielens, load_tasks
+from coldstart.preprocess import load_data, load_tasks
 from coldstart.prototype import PROTO_TARGET_PARAMS, ProtoProjector, UserTextPrototype
 
 TEST_STATES = ("warm_test", "user_cold", "item_cold", "user_item_cold")
@@ -118,7 +118,7 @@ def main(argv=None):
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     cfg = torch.load(args.checkpoints[0], map_location="cpu")["config"]
-    data = load_movielens(cfg["data_root"], cfg.get("text_encoder"), cfg.get("text_source", "plot"))
+    data = load_data(cfg["data_root"], cfg.get("text_encoder"), cfg.get("text_source", "plot"))
 
     methods = ("melu", "user mean", "random")
     if data.text_embeddings is not None:

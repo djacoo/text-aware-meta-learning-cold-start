@@ -14,7 +14,7 @@ from coldstart.active_learning import (
 )
 from coldstart.evaluate import load_model, melu_predictor, task_scores
 from coldstart.model import MeLU, start_params
-from coldstart.preprocess import load_movielens, load_tasks
+from coldstart.preprocess import load_data, load_tasks
 from coldstart.run_active_learning import choose_support, evaluate_active_learning
 from coldstart.run_active_learning import main as run_main
 from coldstart.train import train
@@ -91,7 +91,7 @@ def test_run_active_learning(ml_root, tmp_path, capsys):
     # header, then one line per strategy and k
     assert len(lines) == 1 + 4 * 2
     assert lines[0].split()[-1] == "choose"
-    tasks = load_tasks(load_movielens(ml_root, cfg["text_encoder"]), "user_cold", 0)
+    tasks = load_tasks(load_data(ml_root, cfg["text_encoder"]), "user_cold", 0)
     for line in lines[1:]:
         k = int(line.split()[-5])
         share = np.mean([len(task.support_items) > k for task in tasks])
@@ -114,7 +114,7 @@ def test_active_learning_uses_prototype(ml_root, tmp_path, monkeypatch):
         "proto_dim": 4,
     }
     train(cfg, seed=0, out_dir=tmp_path)
-    data = load_movielens(ml_root, cfg["text_encoder"])
+    data = load_data(ml_root, cfg["text_encoder"])
     model, _, _ = load_model(tmp_path / "proto_melu_seed0.pt", data)
     tasks = load_tasks(data, "user_cold", 0)
 

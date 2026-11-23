@@ -1,6 +1,6 @@
 import torch
 
-from coldstart.preprocess import load_movielens
+from coldstart.preprocess import load_data
 from coldstart.text import encode_texts, load_text_embeddings
 
 
@@ -20,14 +20,14 @@ def test_missing_plot_is_zero():
 def test_cached_embeddings_are_loaded(ml_root):
     cached = torch.rand(3, 4)
     torch.save(cached, ml_root / "plots_fake-encoder.pt")
-    data = load_movielens(ml_root, text_encoder="someone/fake-encoder")
+    data = load_data(ml_root, text_encoder="someone/fake-encoder")
     assert torch.equal(data.text_embeddings, cached)
 
 
 def test_full_descriptions_have_their_own_cache(ml_root):
     cached = torch.rand(3, 4)
     torch.save(cached, ml_root / "full_fake-encoder.pt")
-    data = load_movielens(ml_root, "someone/fake-encoder", text_source="full")
+    data = load_data(ml_root, "someone/fake-encoder", text_source="full")
     assert torch.equal(data.text_embeddings, cached)
 
 

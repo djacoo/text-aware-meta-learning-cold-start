@@ -12,13 +12,13 @@ from coldstart.evaluate import (
     task_scores,
     user_mean,
 )
-from coldstart.preprocess import load_movielens, load_tasks
+from coldstart.preprocess import load_data, load_tasks
 
 
 def user_errors(paths):
     # MAE of each test user per state, averaged over seeds (the users are the same in every seed)
     cfg = torch.load(paths[0], map_location="cpu")["config"]
-    data = load_movielens(cfg["data_root"], cfg.get("text_encoder"), cfg.get("text_source", "plot"))
+    data = load_data(cfg["data_root"], cfg.get("text_encoder"), cfg.get("text_source", "plot"))
     melu = {state: [] for state in TEST_STATES}
     mean = {state: [] for state in TEST_STATES}
     for path in paths:

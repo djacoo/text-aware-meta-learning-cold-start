@@ -3,7 +3,7 @@ import json
 import pytest
 
 from coldstart.download import FILES
-from coldstart.preprocess import load_movielens
+from coldstart.preprocess import load_data
 
 MOVIES = [
     "1::Movie A::1995::PG::x::Drama, Comedy::Ann Lee::x::Bo Ray, Cy Dee::A plot.::x",
@@ -43,4 +43,4 @@ def ml_root(tmp_path):
 
 @pytest.fixture
 def data(ml_root):
-    return load_movielens(ml_root)
+    return load_data(ml_root)

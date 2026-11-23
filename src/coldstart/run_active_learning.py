@@ -14,7 +14,7 @@ from coldstart.active_learning import (
 )
 from coldstart.dataset import Task
 from coldstart.evaluate import TEST_STATES, expand, load_model, melu_predictor, task_scores
-from coldstart.preprocess import load_movielens, load_tasks
+from coldstart.preprocess import load_data, load_tasks
 from coldstart.text import DEFAULT_ENCODER
 
 
@@ -53,7 +53,7 @@ def main(argv=None):
     cfg = torch.load(args.checkpoints[0], map_location="cpu")["config"]
     # text diversity needs item texts also when the model does not use them
     encoder = cfg.get("text_encoder") or DEFAULT_ENCODER
-    data = load_movielens(cfg["data_root"], encoder, cfg.get("text_source", "plot"))
+    data = load_data(cfg["data_root"], encoder, cfg.get("text_source", "plot"))
     runs = [load_model(path, data) for path in args.checkpoints]
     ensemble_models = [model for model, _, _ in runs]
     rating_freqs = compute_rating_frequencies(load_tasks(data, "warm_train", runs[0][2]))

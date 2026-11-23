@@ -42,7 +42,7 @@ def load_text_embeddings(root, texts, encoder_name=DEFAULT_ENCODER, name="plots"
 
 
 def main():
-    from coldstart.preprocess import load_movielens
+    from coldstart.preprocess import load_data
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--encoder", default=DEFAULT_ENCODER)
@@ -50,7 +50,7 @@ def main():
     parser.add_argument("--source", default="plot", choices=["plot", "full"])
     args = parser.parse_args()
 
-    vectors = load_movielens(args.root, args.encoder, args.source).text_embeddings
+    vectors = load_data(args.root, args.encoder, args.source).text_embeddings
     print(f"{len(vectors)} texts, {vectors.shape[1]} dimensions")
 
 

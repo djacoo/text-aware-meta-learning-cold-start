@@ -13,7 +13,7 @@ from coldstart.evaluate import (
     text_knn,
     user_mean,
 )
-from coldstart.preprocess import load_movielens, load_tasks
+from coldstart.preprocess import load_data, load_tasks
 from coldstart.train import main as train_main
 from coldstart.train import train
 
@@ -33,7 +33,7 @@ def test_train_then_evaluate(ml_root, tmp_path, text):
     } | text
     train(cfg, seed=0, out_dir=tmp_path / "checkpoints")
 
-    data = load_movielens(ml_root, cfg.get("text_encoder"))
+    data = load_data(ml_root, cfg.get("text_encoder"))
     model, saved_cfg, seed = load_model(tmp_path / "checkpoints" / "melu_seed0.pt", data)
     assert saved_cfg == cfg
     assert seed == 0
@@ -123,7 +123,7 @@ def test_compare_uses_prototype(ml_root, tmp_path):
     train(cfg, seed=0, out_dir=tmp_path)
     path = str(tmp_path / "proto_melu_seed0.pt")
 
-    data = load_movielens(ml_root, cfg["text_encoder"])
+    data = load_data(ml_root, cfg["text_encoder"])
     model, _, _ = load_model(path, data)
     tasks = load_tasks(data, "user_cold", 0)
     expected = task_scores(tasks, melu_predictor(model, 1, 0.01, data=data))["mae"]
