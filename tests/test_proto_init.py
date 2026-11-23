@@ -2,7 +2,7 @@ from pathlib import Path
 
 import torch
 
-from coldstart.dataset import MovieLens, Task
+from coldstart.dataset import RatingData, Task
 from coldstart.model import MeLU, adapt, meta_step
 from coldstart.prototype import PROTO_TARGET_PARAMS, ProtoProjector, UserTextPrototype
 
@@ -15,7 +15,7 @@ def test_proto_melu_integration():
     emb_dim = 16
     hidden_dim = 32
 
-    mock_dataset = MovieLens(
+    mock_dataset = RatingData(
         root=Path("data/raw"),
         item_features={"genre": torch.randint(0, 5, (num_items, 3))},
         user_features={"gender": torch.randint(0, 2, (num_users,))},

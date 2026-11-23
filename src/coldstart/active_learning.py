@@ -106,7 +106,7 @@ def select_text_diversity(all_items, k, text_embeddings, **kwargs):
         return torch.arange(n)
 
     if text_embeddings is None:
-        raise ValueError("Text embeddings are missing. Load MovieLens with text_encoder!")
+        raise ValueError("Text embeddings are missing. Load the data with a text_encoder!")
 
     candidates_emb = text_embeddings[all_items]
     has_text = candidates_emb.norm(dim=1) > 0

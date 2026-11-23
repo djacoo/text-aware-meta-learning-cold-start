@@ -5,7 +5,7 @@ from pathlib import Path
 
 import torch
 
-from coldstart.dataset import MovieLens, Task
+from coldstart.dataset import RatingData, Task
 from coldstart.download import download_movielens_1m
 from coldstart.text import load_text_embeddings
 
@@ -101,7 +101,7 @@ def load_movielens(root="data/ml-1m", text_encoder=None, text_source="plot"):
     item_features, item_index, plots, descriptions = extract_item_features(root, vocab)
     user_features, user_index = extract_user_features(root, vocab)
     vocab_sizes = {field: len(values) + 1 for field, values in vocab.items()}
-    data = MovieLens(
+    data = RatingData(
         root, item_features, user_features, vocab_sizes, item_index, user_index, plots, descriptions
     )
     if text_encoder:
