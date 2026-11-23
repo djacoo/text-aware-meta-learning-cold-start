@@ -44,7 +44,7 @@ class MeLU(nn.Module):
         self.fc2 = nn.Linear(hidden, hidden)
         self.out = nn.Linear(hidden, 1)
 
-    def forward(self, users, items):
+    def hidden(self, users, items):
         x = []
         for name in self.item_fields:
             v = self.emb[name](getattr(self, f"item_{name}")[items])
@@ -57,8 +57,10 @@ class MeLU(nn.Module):
             x.append(self.text_proj(self.item_text[items]))
         x += [self.emb[name](getattr(self, f"user_{name}")[users]) for name in self.user_fields]
         x = F.relu(self.fc1(torch.cat(x, dim=1)))
-        x = F.relu(self.fc2(x))
-        return self.out(x).squeeze(1)
+        return F.relu(self.fc2(x))
+
+    def forward(self, users, items):
+        return self.out(self.hidden(users, items)).squeeze(1)
 
 
 def build_model(data, cfg):
