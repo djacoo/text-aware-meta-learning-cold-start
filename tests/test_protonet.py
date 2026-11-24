@@ -4,9 +4,8 @@ import torch
 from coldstart import compare
 from coldstart.dataset import Task
 from coldstart.evaluate import load_model, predictor, score
-from coldstart.model import ProtoNet
+from coldstart.model import ProtoNet, proto_step
 from coldstart.preprocess import load_tasks
-from coldstart.protonet import proto_step
 from coldstart.train import train
 
 

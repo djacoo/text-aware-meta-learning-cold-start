@@ -7,9 +7,8 @@ import torch
 import yaml
 
 from coldstart.evaluate import predictor, score
-from coldstart.model import build_model, meta_step
+from coldstart.model import build_model, meta_step, proto_step
 from coldstart.preprocess import load_data, load_tasks
-from coldstart.protonet import proto_step
 
 
 def set_seed(seed):

@@ -9,7 +9,6 @@ import torch
 from coldstart.metrics import mae, ndcg_at_k
 from coldstart.model import adapt, build_model, predict
 from coldstart.preprocess import load_data, load_tasks
-from coldstart.protonet import protonet_predictor
 
 TEST_STATES = ("warm_test", "user_cold", "item_cold", "user_item_cold")
 METRICS = ("mae", "ndcg@1", "ndcg@3")
@@ -41,6 +40,16 @@ def melu_predictor(model, steps, lr):
             return predict(model, params, torch.full_like(items, task.user), items).cpu()
 
     return melu
+
+
+def protonet_predictor(model):
+    model.eval()
+
+    def protonet(task):
+        with torch.no_grad():
+            return model.predict(task).cpu()
+
+    return protonet
 
 
 def predictor(model, cfg):
