@@ -11,8 +11,6 @@ venv/
 data/
 checkpoints/
 runs/
-wandb/
-outputs/
 *.pt
 *.pth
 *.npy

@@ -1,4 +1,3 @@
-import argparse
 from pathlib import Path
 
 import torch
@@ -10,9 +9,9 @@ def missing(texts):
     return torch.tensor([text == "N/A" for text in texts])
 
 
-def encode_texts(texts, encoder, batch_size=64):
+def encode_texts(texts, encoder):
     vectors = encoder.encode(
-        texts, batch_size=batch_size, convert_to_tensor=True, normalize_embeddings=True
+        texts, batch_size=64, convert_to_tensor=True, normalize_embeddings=True
     )
     # encode returns an inference tensor, which cannot be changed in place
     vectors = vectors.cpu().float().clone()
@@ -42,20 +41,3 @@ def load_text_embeddings(root, texts, encoder_name=DEFAULT_ENCODER, name="plots"
     vectors = encode_texts(texts, SentenceTransformer(encoder_name))
     torch.save(vectors, path)
     return vectors
-
-
-def main():
-    from coldstart.preprocess import load_data
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--encoder", default=DEFAULT_ENCODER)
-    parser.add_argument("--root", default="data/ml-1m")
-    parser.add_argument("--source", default="plot", choices=["plot", "full"])
-    args = parser.parse_args()
-
-    vectors = load_data(args.root, args.encoder, args.source).text_embeddings
-    print(f"{len(vectors)} texts, {vectors.shape[1]} dimensions")
-
-
-if __name__ == "__main__":
-    main()

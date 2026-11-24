@@ -12,6 +12,8 @@ URL = "https://huggingface.co/datasets/McAuley-Lab/Amazon-Reviews-2023/resolve/m
 RATINGS = "benchmark/5core/rating_only/Movies_and_TV.csv"
 META = "raw/meta_categories/meta_Movies_and_TV.jsonl"
 STATES = ("warm_state", "user_cold_state", "item_cold_state", "user_and_item_cold_state")
+# share of items and users that are new, see build_amazon
+NEW_ITEMS, NEW_USERS = 0.4, 0.2
 # Amazon labels mix genres with studios, formats and deals, so they are mapped to MovieLens genres
 GENRES = {
     "Action": r"\baction\b",
@@ -123,7 +125,7 @@ def read_items(meta_path, counts):
     return items
 
 
-def build_amazon(root="data/amazon", n_items=5000, new_items=0.4, new_users=0.2, seed=0):
+def build_amazon(root="data/amazon", n_items=5000):
     root = Path(root)
     ratings_path, meta_path = download_amazon(root)
 
@@ -150,7 +152,7 @@ def build_amazon(root="data/amazon", n_items=5000, new_items=0.4, new_users=0.2,
     # new items are the last ones to appear, as MeLU used the release year; Amazon users rate
     # few items, so 40% instead of MeLU's 20% leaves enough users in the new item states
     times = sorted(first[a] for a in kept)
-    cutoff = times[int(len(times) * (1 - new_items))]
+    cutoff = times[int(len(times) * (1 - NEW_ITEMS))]
     new_item = {item_id[a]: first[a] >= cutoff for a in kept}
 
     # second pass: ratings of the kept items, a repeated rating keeps the latest
@@ -166,7 +168,7 @@ def build_amazon(root="data/amazon", n_items=5000, new_items=0.4, new_users=0.2,
     per_user = Counter(user for user, _ in latest)
     users = sorted(user for user, n in per_user.items() if 13 <= n <= 100)
     user_id = {user: i for i, user in enumerate(users)}
-    new_user = set(random.Random(seed).sample(range(len(users)), int(len(users) * new_users)))
+    new_user = set(random.Random(0).sample(range(len(users)), int(len(users) * NEW_USERS)))
 
     states = {name: ({}, {}) for name in STATES}
     for (user, item), (rating, _) in sorted(latest.items(), key=lambda kv: kv[1][1]):
@@ -199,11 +201,11 @@ def describe(item):
     return " ".join(parts)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default="data/amazon")
     parser.add_argument("--items", type=int, default=5000)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     build_amazon(args.root, args.items)
 
 

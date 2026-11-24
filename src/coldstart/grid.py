@@ -11,7 +11,7 @@ import yaml
 
 from coldstart.train import train
 
-# Selection uses warm_val only, the test states are never touched here
+# selection uses warm_val only, the test states are never touched here
 GRID = {
     "inner_lr": [1.0e-4, 1.0e-3, 1.0e-2],
     "outer_lr": [1.0e-4, 5.0e-4, 1.0e-3],
@@ -27,12 +27,12 @@ def run(cfg, out):
     return best, cfg
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/melu.yaml")
     parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--out", default="checkpoints/grid")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     with open(args.config) as f:
         base = yaml.safe_load(f)
