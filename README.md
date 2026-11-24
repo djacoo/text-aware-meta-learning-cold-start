@@ -51,7 +51,6 @@ It prints MAE and nDCG@3 for each state and k, with a paired Wilcoxon test again
 The second dataset is Movies & TV from Amazon Reviews 2023. The first run on `data/amazon/` downloads the ratings and the item metadata (about 1.7 GB) and builds the four states as MeLU does: items need a title and a description, editions of the same film are reduced to the most rated one, the 5000 most rated films are kept, the last 40% to appear are the new items and a random 20% of the users are the new users. Amazon has no user profile, so users are only modelled by adaptation:
 
 ```bash
-python -m coldstart.amazon
 python -m coldstart.train --config configs/amazon_tuned.yaml --seed 0 --out checkpoints/amazon/tuned
 ```
 

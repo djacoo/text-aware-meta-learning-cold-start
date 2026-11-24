@@ -202,11 +202,11 @@ def describe(item):
 
 
 def main(argv=None):
+    # always data/amazon, the folder name tells load_data which dataset it is
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default="data/amazon")
     parser.add_argument("--items", type=int, default=5000)
     args = parser.parse_args(argv)
-    build_amazon(args.root, args.items)
+    build_amazon("data/amazon", args.items)
 
 
 if __name__ == "__main__":
