@@ -52,10 +52,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     args.checkpoints = expand(args.checkpoints)
 
-    cfg = torch.load(args.checkpoints[0], map_location="cpu")["config"]
+    first = torch.load(args.checkpoints[0], map_location="cpu")["config"]
     # text diversity needs item texts also when the model does not use them
-    encoder = cfg.get("text_encoder") or DEFAULT_ENCODER
-    data = load_data(cfg["data_root"], encoder, cfg.get("text_source", "plot"))
+    encoder = first.get("text_encoder") or DEFAULT_ENCODER
+    data = load_data(first["data_root"], encoder, first.get("text_source", "plot"))
     runs = [load_model(path, data) for path in args.checkpoints]
     ensemble = [model for model, _, _ in runs]
     rating_freqs = rating_frequencies(load_tasks(data, "warm_train", runs[0][2]))
@@ -91,7 +91,8 @@ def main(argv=None):
                         options,
                     )
                     scores.setdefault(name, []).append(result)
-            # share of users with more than k support items, the others give the same answer
+            # share of users with more than k support items, the others give the same answer;
+            # support sizes do not depend on the seed
             choose = np.mean([len(task.support_items) > k_items for task in tasks])
             mae = {
                 name: np.mean([r["mae"] for r in results], axis=0)
