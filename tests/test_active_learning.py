@@ -9,6 +9,7 @@ from coldstart.active_learning import (
     compute_rating_frequencies,
     select_ensemble_uncertainty,
     select_expected_model_change,
+    select_hybrid,
     select_random,
     select_text_diversity,
 )
@@ -40,6 +41,7 @@ def setup(data):
         select_random,
         select_ensemble_uncertainty,
         select_expected_model_change,
+        select_hybrid,
         select_text_diversity,
     ],
 )
@@ -89,7 +91,7 @@ def test_run_active_learning(ml_root, tmp_path, capsys):
     run_main(paths + ["--states", "user_cold", "--k", "1", "2"])
     lines = [line for line in capsys.readouterr().out.split("\n") if line.strip()]
     # header, then one line per strategy and k
-    assert len(lines) == 1 + 4 * 2
+    assert len(lines) == 1 + 5 * 2
     assert lines[0].split()[-1] == "choose"
     tasks = load_tasks(load_data(ml_root, cfg["text_encoder"]), "user_cold", 0)
     for line in lines[1:]:
@@ -150,3 +152,11 @@ def test_text_diversity_picks_films_without_text_last():
         picked = select_text_diversity(items, 3, embeddings).tolist()
         # after the random first pick, the film without text is never preferred
         assert 3 not in picked[1:]
+
+
+def test_hybrid_starts_with_model_change(setup):
+    tasks, kwargs = setup
+    task = max(tasks, key=lambda t: len(t.support_items))
+    first = select_expected_model_change(task.support_items, 1, user_id=task.user, **kwargs)
+    picked = select_hybrid(task.support_items, 3, user_id=task.user, **kwargs)
+    assert picked[0] == first[0] and len(set(picked.tolist())) == 3

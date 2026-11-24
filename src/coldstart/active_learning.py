@@ -97,6 +97,18 @@ def select_expected_model_change(c_items, k, melu_model, user_id, data=None, **k
     return top_k_indices.cpu()
 
 
+def select_hybrid(c_items, k, **kwargs):
+    """
+    Expected model change for the first item, the others at random.
+    """
+    n = c_items.size(0)
+    if k >= n:
+        return torch.arange(n)
+    first = select_expected_model_change(c_items, 1, **kwargs).item()
+    rest = [i for i in torch.randperm(n).tolist() if i != first][: k - 1]
+    return torch.tensor([first, *rest])
+
+
 def select_text_diversity(all_items, k, text_embeddings, **kwargs):
     """
     Selects k items maximizing semantic diversity using a Greedy Max-Min distance approach.

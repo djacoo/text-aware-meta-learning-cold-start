@@ -9,6 +9,7 @@ from coldstart.active_learning import (
     compute_rating_frequencies,
     select_ensemble_uncertainty,
     select_expected_model_change,
+    select_hybrid,
     select_random,
     select_text_diversity,
 )
@@ -72,6 +73,10 @@ def main(argv=None):
                     ),
                     "model change": (
                         select_expected_model_change,
+                        {"melu_model": model, "rating_freqs": rating_freqs},
+                    ),
+                    "hybrid": (
+                        select_hybrid,
                         {"melu_model": model, "rating_freqs": rating_freqs},
                     ),
                     "text diversity": (
