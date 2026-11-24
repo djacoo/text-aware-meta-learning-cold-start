@@ -20,16 +20,19 @@ def user_errors(paths):
     # MAE of each test user per state, averaged over seeds (the users are the same in every seed)
     cfg = torch.load(paths[0], map_location="cpu")["config"]
     data = load_data(cfg["data_root"], cfg.get("text_encoder"), cfg.get("text_source", "plot"))
-    melu = {state: [] for state in TEST_STATES}
-    mean = {state: [] for state in TEST_STATES}
+    model_errors = {state: [] for state in TEST_STATES}
+    mean_errors = {state: [] for state in TEST_STATES}
     for path in paths:
         model, cfg, seed = load_model(path, data)
-        predict = predictor(model, cfg, data)
+        predict = predictor(model, cfg)
         for state in TEST_STATES:
             tasks = load_tasks(data, state, seed)
-            melu[state].append(task_scores(tasks, predict)["mae"])
-            mean[state].append(task_scores(tasks, user_mean)["mae"])
-    return {state: (np.mean(melu[state], axis=0), np.mean(mean[state], axis=0)) for state in melu}
+            model_errors[state].append(task_scores(tasks, predict)["mae"])
+            mean_errors[state].append(task_scores(tasks, user_mean)["mae"])
+    return {
+        state: (np.mean(model_errors[state], axis=0), np.mean(mean_errors[state], axis=0))
+        for state in TEST_STATES
+    }
 
 
 def main(argv=None):

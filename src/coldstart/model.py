@@ -1,14 +1,17 @@
+from dataclasses import replace
+
 import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.func import functional_call
 
 from coldstart.dataset import Task
-from coldstart.prototype import PROTO_TARGET_PARAMS
+from coldstart.prototype import add_prototype
 
-# Only the decision layers adapt to each user, as in MeLU
+# only the decision layers adapt to each user, as in MeLU
 LOCAL_PARAMS = ("fc1.weight", "fc1.bias", "fc2.weight", "fc2.bias", "out.weight", "out.bias")
 ID_FIELDS = ("director", "actors")
+RATINGS = torch.arange(1.0, 6.0)
 
 
 class MeLU(nn.Module):
@@ -63,15 +66,41 @@ class MeLU(nn.Module):
         return self.out(self.hidden(users, items)).squeeze(1)
 
 
+class ProtoNet(nn.Module):
+    # Prototypical Networks (Snell et al., 2017), the five ratings are the classes
+    def __init__(self, data, emb_dim=32, hidden=64, text="none", id_dropout=0.0):
+        super().__init__()
+        # the user is the same for every item of a task, so only items are embedded
+        self.encoder = MeLU(replace(data, user_features={}), emb_dim, hidden, text, id_dropout)
+
+    def log_probs(self, task):
+        device = self.encoder.fc1.weight.device
+        support = self.encoder.hidden(None, task.support_items.to(device))
+        query = self.encoder.hidden(None, task.query_items.to(device))
+        classes = task.support_ratings.to(device).long() - 1
+        present = classes.unique()
+        prototypes = torch.stack([support[classes == c].mean(dim=0) for c in present])
+        distances = ((query[:, None] - prototypes[None]) ** 2).sum(dim=2)
+        # ratings the user never gave in the support set get no probability
+        logits = torch.full((len(query), len(RATINGS)), float("-inf"), device=device)
+        logits[:, present] = -distances
+        return F.log_softmax(logits, dim=1)
+
+    def predict(self, task):
+        # expected rating, so it can be scored with MAE like MeLU
+        return self.log_probs(task).exp() @ RATINGS.to(self.encoder.fc1.weight.device)
+
+
 def build_model(data, cfg):
-    return MeLU(
-        data,
-        cfg["emb_dim"],
-        cfg["hidden"],
-        cfg.get("text", "none"),
-        cfg.get("id_dropout", 0.0),
-        cfg.get("adapt_text", False),
+    text, id_dropout = cfg.get("text", "none"), cfg.get("id_dropout", 0.0)
+    if cfg.get("model") == "protonet":
+        return ProtoNet(data, cfg["emb_dim"], cfg["hidden"], text, id_dropout)
+    model = MeLU(
+        data, cfg["emb_dim"], cfg["hidden"], text, id_dropout, cfg.get("adapt_text", False)
     )
+    if cfg.get("proto", False):
+        add_prototype(model, data, cfg.get("proto_dim", 32))
+    return model
 
 
 def task_inputs(task, device, query=False):
@@ -85,29 +114,17 @@ def predict(model, params, users, items):
     return functional_call(model, params, (users, items))
 
 
-def adapt(
-    model, task, steps, lr, first_order=False, proto_net=None, proto_projector=None, data=None
-):
-    # Fast weights stay in the graph, so the outer update sees through the inner one.
-    # The original code used load_state_dict here, which cut the graph (MeLU issue #9).
+def adapt(model, task, steps, lr, first_order=False):
+    # fast weights stay in the graph, so the outer update sees through the inner one;
+    # the original code used load_state_dict here, which cut the graph (MeLU issue #9)
     device = next(model.parameters()).device
     users, items, ratings = task_inputs(task, device)
     params = dict(model.named_parameters())
-
-    if proto_net is not None and proto_projector is not None:
-        if data is None:
-            raise ValueError("the user prototype needs the item text embeddings, pass data")
+    if hasattr(model, "proto_net"):
         # the text prototype of the support ratings shifts the output layer before the inner loop
-        supp_text_emb = data.text_embeddings.to(device)[task.support_items.to(device)]
-        supp_ratings = task.support_ratings.to(device)
-
-        p_u = proto_net(supp_text_emb, supp_ratings)
-        deltas = proto_projector(p_u, params)
-
-        for name in PROTO_TARGET_PARAMS:
-            if name in deltas:
-                params[name] = params[name] + deltas[name]
-
+        prototype = model.proto_net(items, ratings)
+        for name, shift in model.proto_projector(prototype, params).items():
+            params[name] = params[name] + shift
     for _ in range(steps):
         loss = F.mse_loss(predict(model, params, users, items), ratings)
         local = [params[name] for name in model.local_params]
@@ -117,33 +134,13 @@ def adapt(
     return params
 
 
-def meta_step(
-    model,
-    tasks,
-    optimizer,
-    steps,
-    lr,
-    first_order=False,
-    proto_net=None,
-    proto_projector=None,
-    data=None,
-):
+def meta_step(model, tasks, optimizer, steps, lr):
     device = next(model.parameters()).device
     losses = []
     for task in tasks:
-        params = adapt(
-            model,
-            task,
-            steps,
-            lr,
-            first_order,
-            proto_net=proto_net,
-            proto_projector=proto_projector,
-            data=data,
-        )
+        params = adapt(model, task, steps, lr)
         users, items, ratings = task_inputs(task, device, query=True)
         losses.append(F.mse_loss(predict(model, params, users, items), ratings))
-
     loss = torch.stack(losses).mean()
     optimizer.zero_grad()
     loss.backward()
@@ -151,13 +148,7 @@ def meta_step(
     return loss.item()
 
 
-def start_params(model, data=None):
+def start_params(model):
     # the model a user has before any rating: with a prototype, shifted by an empty support
-    proto_net = getattr(model, "proto_net", None)
-    proto_projector = getattr(model, "proto_projector", None)
-    if proto_net is None or proto_projector is None:
-        return dict(model.named_parameters())
     empty = Task(0, torch.empty(0, dtype=torch.long), torch.empty(0), None, None)
-    return adapt(
-        model, empty, 0, 0.0, proto_net=proto_net, proto_projector=proto_projector, data=data
-    )
+    return adapt(model, empty, 0, 0.0)

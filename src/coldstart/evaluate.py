@@ -9,8 +9,7 @@ import torch
 from coldstart.metrics import mae, ndcg_at_k
 from coldstart.model import adapt, build_model, predict
 from coldstart.preprocess import load_data, load_tasks
-from coldstart.protonet import ProtoNet, protonet_predictor
-from coldstart.prototype import PROTO_TARGET_PARAMS, ProtoProjector, UserTextPrototype
+from coldstart.protonet import protonet_predictor
 
 TEST_STATES = ("warm_test", "user_cold", "item_cold", "user_item_cold")
 METRICS = ("mae", "ndcg@1", "ndcg@3")
@@ -30,27 +29,13 @@ def score(tasks, predict_query):
     return {name: float(np.mean(v)) for name, v in task_scores(tasks, predict_query).items()}
 
 
-def melu_predictor(model, steps, lr, proto_net=None, proto_projector=None, data=None):
+def melu_predictor(model, steps, lr):
     device = next(model.parameters()).device
     model.eval()
 
-    if proto_net is None:
-        proto_net = getattr(model, "proto_net", None)
-    if proto_projector is None:
-        proto_projector = getattr(model, "proto_projector", None)
-
     def melu(task):
         # first order is enough at test time, no meta-gradient is needed
-        params = adapt(
-            model,
-            task,
-            steps,
-            lr,
-            first_order=True,
-            proto_net=proto_net,
-            proto_projector=proto_projector,
-            data=data,
-        )
+        params = adapt(model, task, steps, lr, first_order=True)
         items = task.query_items.to(device)
         with torch.no_grad():
             return predict(model, params, torch.full_like(items, task.user), items).cpu()
@@ -58,14 +43,10 @@ def melu_predictor(model, steps, lr, proto_net=None, proto_projector=None, data=
     return melu
 
 
-def predictor(model, cfg, data):
+def predictor(model, cfg):
     if cfg.get("model") == "protonet":
         return protonet_predictor(model)
-    return melu_predictor(model, cfg["inner_steps"], cfg["inner_lr"], data=data)
-
-
-def evaluate(model, tasks, steps, lr, proto_net=None, proto_projector=None, data=None):
-    return score(tasks, melu_predictor(model, steps, lr, proto_net, proto_projector, data))
+    return melu_predictor(model, cfg["inner_steps"], cfg["inner_lr"])
 
 
 def user_mean(task):
@@ -85,37 +66,13 @@ def text_knn(task, embeddings):
     return torch.where(total > 0, pred, task.support_ratings.mean())
 
 
-def load_model(path, data, device="cpu"):
-    checkpoint = torch.load(path, map_location=device)
+def load_model(path, data):
+    checkpoint = torch.load(path, map_location="cpu")
     cfg = checkpoint["config"]
-    if cfg.get("model") == "protonet":
-        text, id_dropout = cfg.get("text", "none"), cfg.get("id_dropout", 0.0)
-        model = ProtoNet(data, cfg["emb_dim"], cfg["hidden"], text, id_dropout).to(device)
-        model.load_state_dict(checkpoint["state"])
-        return model.eval(), cfg, checkpoint["seed"]
-    model = build_model(data, cfg).to(device)
+    model = build_model(data, cfg)
     model.load_state_dict(checkpoint["state"])
-
-    if cfg.get("proto", False) and "proto_net" in checkpoint:
-        text_dim = data.text_embeddings.shape[1]
-        proto_dim = cfg.get("proto_dim", 32)
-        proto_net = UserTextPrototype(text_dim=text_dim, proto_dim=proto_dim).to(device)
-        proto_projector = ProtoProjector(
-            proto_dim=proto_dim, model=model, local_param_names=PROTO_TARGET_PARAMS
-        ).to(device)
-
-        proto_net.load_state_dict(checkpoint["proto_net"])
-        proto_projector.load_state_dict(checkpoint["proto_projector"])
-
-        model.proto_net = proto_net
-        model.proto_projector = proto_projector
-    else:
-        model.proto_net = None
-        model.proto_projector = None
-
     # loaded models are only used for inference, so dropout stays off
-    model.eval()
-    return model, cfg, checkpoint["seed"]
+    return model.eval(), cfg, checkpoint["seed"]
 
 
 def expand(paths):
@@ -130,7 +87,6 @@ def main(argv=None):
     args = parser.parse_args(argv)
     args.checkpoints = expand(args.checkpoints)
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     cfg = torch.load(args.checkpoints[0], map_location="cpu")["config"]
     data = load_data(cfg["data_root"], cfg.get("text_encoder"), cfg.get("text_source", "plot"))
 
@@ -140,12 +96,12 @@ def main(argv=None):
     results = {m: {s: {name: [] for name in METRICS} for s in TEST_STATES} for m in methods}
 
     for path in args.checkpoints:
-        model, cfg, seed = load_model(path, data, device=device)
+        model, cfg, seed = load_model(path, data)
         generator = torch.Generator().manual_seed(seed)
         for state in TEST_STATES:
             tasks = load_tasks(data, state, seed)
             scores = {
-                "model": score(tasks, predictor(model, cfg, data)),
+                "model": score(tasks, predictor(model, cfg)),
                 "user mean": score(tasks, user_mean),
                 "random": score(tasks, partial(random_ratings, generator=generator)),
             }

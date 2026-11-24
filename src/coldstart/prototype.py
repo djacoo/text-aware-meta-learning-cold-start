@@ -1,68 +1,49 @@
 import torch
-import torch.nn as nn
+from torch import nn
 
 PROTO_TARGET_PARAMS = ("out.weight", "out.bias")
+# ratings from here up count as liked
+LIKED = 3.5
 
 
 class UserTextPrototype(nn.Module):
-    """
-    Computes a user text prototype p_u from support set item text embeddings and ratings.
-    """
-
-    def __init__(self, text_dim: int, proto_dim: int, rating_threshold: float = 3.5):
+    def __init__(self, item_text, proto_dim):
         super().__init__()
-        self.rating_threshold = rating_threshold
-
-        # Maps concatenated [pos_proto | neg_proto] to latent space
+        # the text vectors are fixed and come with the data, they are not saved with the weights
+        self.register_buffer("item_text", item_text, persistent=False)
         self.proto_encoder = nn.Sequential(
-            nn.Linear(text_dim * 2, proto_dim), nn.ReLU(), nn.Linear(proto_dim, proto_dim)
+            nn.Linear(item_text.shape[1] * 2, proto_dim), nn.ReLU(), nn.Linear(proto_dim, proto_dim)
         )
 
-    def forward(self, supp_text_emb: torch.Tensor, supp_ratings: torch.Tensor) -> torch.Tensor:
-        pos_mask = (supp_ratings >= self.rating_threshold).float().unsqueeze(-1)
-        neg_mask = (supp_ratings < self.rating_threshold).float().unsqueeze(-1)
-
-        pos_count = pos_mask.sum(dim=0)
-        neg_count = neg_mask.sum(dim=0)
-
-        pos_proto = (supp_text_emb * pos_mask).sum(dim=0) / (pos_count + 1e-8)
-        neg_proto = (supp_text_emb * neg_mask).sum(dim=0) / (neg_count + 1e-8)
-
-        if pos_count == 0:
-            pos_proto = torch.zeros_like(neg_proto)
-        if neg_count == 0:
-            neg_proto = torch.zeros_like(pos_proto)
-
-        combined = torch.cat([pos_proto, neg_proto], dim=-1)
-        return self.proto_encoder(combined)
+    def forward(self, items, ratings):
+        # mean text of the liked and of the disliked support items, an empty group gives zeros
+        texts = self.item_text[items]
+        liked = (ratings >= LIKED).float().unsqueeze(-1)
+        disliked = 1 - liked
+        pos = (texts * liked).sum(dim=0) / (liked.sum(dim=0) + 1e-8)
+        neg = (texts * disliked).sum(dim=0) / (disliked.sum(dim=0) + 1e-8)
+        return self.proto_encoder(torch.cat([pos, neg], dim=-1))
 
 
 class ProtoProjector(nn.Module):
-    """
-    Projects user prototype p_u into parameter deltas matching MeLU local parameters.
-    """
-
-    def __init__(self, proto_dim: int, model: nn.Module, local_param_names: tuple):
+    def __init__(self, proto_dim, model):
         super().__init__()
         self.projectors = nn.ModuleDict()
-        named_params = dict(model.named_parameters())
-
-        for name in local_param_names:
-            param_numel = named_params[name].numel()
-            key = name.replace(".", "_")
-            proj = nn.Linear(proto_dim, param_numel)
-
-            # Initialize weights and biases to zero
+        for name in PROTO_TARGET_PARAMS:
+            proj = nn.Linear(proto_dim, model.get_parameter(name).numel())
+            # zero at the start, so training begins from plain MeLU
             nn.init.zeros_(proj.weight)
             nn.init.zeros_(proj.bias)
-            self.projectors[key] = proj
+            self.projectors[name.replace(".", "_")] = proj
 
-    def forward(self, p_u: torch.Tensor, current_params: dict) -> dict[str, torch.Tensor]:
-        deltas = {}
-        for name, param_tensor in current_params.items():
-            key = name.replace(".", "_")
-            if key in self.projectors:
-                # Project p_u and reshape to match target parameter shape
-                delta_flat = self.projectors[key](p_u)
-                deltas[name] = delta_flat.view_as(param_tensor)
-        return deltas
+    def forward(self, prototype, params):
+        return {
+            name: self.projectors[name.replace(".", "_")](prototype).view_as(params[name])
+            for name in PROTO_TARGET_PARAMS
+        }
+
+
+def add_prototype(model, data, proto_dim):
+    # the prototype modules live inside the model, so they train and are saved with it
+    model.proto_net = UserTextPrototype(data.text_embeddings, proto_dim)
+    model.proto_projector = ProtoProjector(proto_dim, model)

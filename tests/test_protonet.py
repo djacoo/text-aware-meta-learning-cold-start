@@ -4,8 +4,9 @@ import torch
 from coldstart import compare
 from coldstart.dataset import Task
 from coldstart.evaluate import load_model, predictor, score
+from coldstart.model import ProtoNet
 from coldstart.preprocess import load_tasks
-from coldstart.protonet import ProtoNet, proto_step
+from coldstart.protonet import proto_step
 from coldstart.train import train
 
 
@@ -50,7 +51,7 @@ def test_train_evaluate_compare(ml_root, data, tmp_path):
     model, saved_cfg, seed = load_model(path, data)
     assert saved_cfg == cfg and not model.training
 
-    scores = score(load_tasks(data, "user_cold", seed), predictor(model, saved_cfg, data))
+    scores = score(load_tasks(data, "user_cold", seed), predictor(model, saved_cfg))
     assert 0 <= scores["mae"] <= 4
     errors, mean_errors = compare.user_errors([path])["user_cold"]
     assert errors.mean() == pytest.approx(scores["mae"])

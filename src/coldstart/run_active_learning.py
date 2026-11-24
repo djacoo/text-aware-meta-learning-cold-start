@@ -7,12 +7,12 @@ import torch
 from scipy.stats import wilcoxon
 
 from coldstart.active_learning import (
-    compute_rating_frequencies,
-    select_ensemble_uncertainty,
+    rating_frequencies,
     select_expected_model_change,
     select_hybrid,
     select_random,
     select_text_diversity,
+    select_uncertainty,
 )
 from coldstart.dataset import Task
 from coldstart.evaluate import TEST_STATES, expand, load_model, melu_predictor, task_scores
@@ -20,12 +20,12 @@ from coldstart.preprocess import load_data, load_tasks
 from coldstart.text import DEFAULT_ENCODER
 
 
-def choose_support(task, k_items, strategy_fn, **strategy_kwargs):
+def choose_support(task, k_items, strategy, options):
     # the k items come from the support set, the query stays the same for every strategy
-    if task.support_items.size(0) <= k_items:
-        idxs = torch.arange(task.support_items.size(0))
+    if len(task.support_items) <= k_items:
+        idxs = torch.arange(len(task.support_items))
     else:
-        idxs = strategy_fn(task.support_items, k_items, user_id=task.user, **strategy_kwargs)
+        idxs = strategy(task.support_items, k_items, user=task.user, **options)
     return Task(
         user=task.user,
         support_items=task.support_items[idxs],
@@ -35,13 +35,12 @@ def choose_support(task, k_items, strategy_fn, **strategy_kwargs):
     )
 
 
-def evaluate_active_learning(model, tasks, steps, lr, k_items, seed, data, strategy_fn, **kwargs):
+def evaluate_active_learning(model, tasks, steps, lr, k_items, seed, strategy, options):
     # same seed for every strategy, so random choices can be repeated
     random.seed(seed)
     torch.manual_seed(seed)
-    al_tasks = [choose_support(task, k_items, strategy_fn, data=data, **kwargs) for task in tasks]
-    # a proto model adapts with its user prototype
-    return task_scores(al_tasks, melu_predictor(model, steps, lr, data=data))
+    al_tasks = [choose_support(task, k_items, strategy, options) for task in tasks]
+    return task_scores(al_tasks, melu_predictor(model, steps, lr))
 
 
 def main(argv=None):
@@ -58,8 +57,8 @@ def main(argv=None):
     encoder = cfg.get("text_encoder") or DEFAULT_ENCODER
     data = load_data(cfg["data_root"], encoder, cfg.get("text_source", "plot"))
     runs = [load_model(path, data) for path in args.checkpoints]
-    ensemble_models = [model for model, _, _ in runs]
-    rating_freqs = compute_rating_frequencies(load_tasks(data, "warm_train", runs[0][2]))
+    ensemble = [model for model, _, _ in runs]
+    rating_freqs = rating_frequencies(load_tasks(data, "warm_train", runs[0][2]))
 
     rows = {}
     for state in args.states:
@@ -68,27 +67,19 @@ def main(argv=None):
             # per user scores of each strategy, averaged over seeds
             scores = {}
             for model, cfg, seed in runs:
+                change = {"model": model, "rating_freqs": rating_freqs}
                 strategies = {
                     "random": (select_random, {}),
-                    "uncertainty": (
-                        select_ensemble_uncertainty,
-                        {"ensemble_models": ensemble_models},
-                    ),
-                    "model change": (
-                        select_expected_model_change,
-                        {"melu_model": model, "rating_freqs": rating_freqs},
-                    ),
-                    "hybrid": (
-                        select_hybrid,
-                        {"melu_model": model, "rating_freqs": rating_freqs},
-                    ),
+                    "uncertainty": (select_uncertainty, {"ensemble": ensemble}),
+                    "model change": (select_expected_model_change, change),
+                    "hybrid": (select_hybrid, change),
                     "text diversity": (
                         select_text_diversity,
                         {"text_embeddings": data.text_embeddings},
                     ),
                 }
                 tasks = load_tasks(data, state, seed)
-                for name, (strategy_fn, kwargs) in strategies.items():
+                for name, (strategy, options) in strategies.items():
                     result = evaluate_active_learning(
                         model,
                         tasks,
@@ -96,9 +87,8 @@ def main(argv=None):
                         cfg["inner_lr"],
                         k_items,
                         seed,
-                        data,
-                        strategy_fn,
-                        **kwargs,
+                        strategy,
+                        options,
                     )
                     scores.setdefault(name, []).append(result)
             # share of users with more than k support items, the others give the same answer
