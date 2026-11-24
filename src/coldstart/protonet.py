@@ -43,6 +43,9 @@ def proto_step(model, tasks, optimizer):
         seen = torch.isfinite(log_probs.gather(1, classes[:, None]).squeeze(1))
         if seen.any():
             losses.append(F.nll_loss(log_probs[seen], classes[seen]))
+    if not losses:
+        # no query rating of the batch has a prototype, nothing to learn from
+        return float("nan")
     loss = torch.stack(losses).mean()
     optimizer.zero_grad()
     loss.backward()

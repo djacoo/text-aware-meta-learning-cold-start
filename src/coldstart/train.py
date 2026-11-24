@@ -70,7 +70,7 @@ def train(cfg, seed, out_dir):
             batches = range(0, len(train_tasks), batch)
             losses = [proto_step(model, train_tasks[i : i + batch], optimizer) for i in batches]
             val_mae = score(val_tasks, protonet_predictor(model))["mae"]
-            print(f"epoch {epoch:>3}  loss {np.mean(losses):.4f}  val mae {val_mae:.4f}")
+            print(f"epoch {epoch:>3}  loss {np.nanmean(losses):.4f}  val mae {val_mae:.4f}")
             if val_mae < best:
                 best = val_mae
                 torch.save({"config": cfg, "seed": seed, "state": model.state_dict()}, path)
