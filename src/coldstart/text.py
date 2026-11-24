@@ -31,7 +31,10 @@ def load_text_embeddings(root, texts, encoder_name=DEFAULT_ENCODER, name="plots"
 
     path = Path(root) / f"{name}_{encoder_name.split('/')[-1]}.pt"
     if path.exists():
-        return torch.load(path)
+        vectors = torch.load(path)
+        if len(vectors) != len(texts):
+            raise ValueError(f"{path} was built for other items, delete it to encode again")
+        return vectors
 
     # imported here so runs without text don't load transformers
     from sentence_transformers import SentenceTransformer
