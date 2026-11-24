@@ -1,6 +1,6 @@
 import json
 
-from coldstart.amazon import build_amazon, genres, title_key
+from coldstart.amazon import build_amazon, genres, same_film, title_key
 from coldstart.preprocess import load_data, load_tasks
 
 
@@ -28,14 +28,37 @@ def write_raw(root):
         }
         for i, asin in enumerate(films)
     ]
-    metas.append({"parent_asin": "F0BR", "title": "Film 0 (Blu-ray)", "description": ["Same."]})
+    metas.append(
+        {
+            "parent_asin": "F0BR",
+            "title": "Film 0 (Blu-ray)",
+            "description": ["Same."],
+            "details": {"Directors": "Various"},
+        }
+    )
     metas.append({"parent_asin": "NODESC", "title": "No text", "description": []})
     (raw / "meta_Movies_and_TV.jsonl").write_text("\n".join(json.dumps(m) for m in metas))
 
 
 def test_title_key():
     assert title_key("The Matrix [Blu-ray]") == title_key("The Matrix (Widescreen Edition)")
+    assert title_key("Thing From Another World, The (1951)") == title_key(
+        "The Thing from Another World"
+    )
+    assert title_key("Firefly: The Complete Series Blu Ray") == title_key(
+        "Firefly: The Complete Series"
+    )
+    assert title_key("Alien Director's Cut DVD") == title_key("Alien")
     assert title_key("The Matrix") != title_key("The Matrix Reloaded")
+
+
+def test_same_film():
+    room, the_room = {"directors": ["Lenny Abrahamson"]}, {"directors": ["Tommy Wiseau"]}
+    assert title_key("Room") == title_key("The Room") and not same_film(room, the_room)
+    assert same_film(room, {"directors": ["Lenny Abrahamson", "Other"]})
+    assert same_film(room, {"directors": []})
+    assert same_film({"directors": ["Lasse Hallström"]}, {"directors": ["Lasse Hallstrm"]})
+    assert same_film({"directors": ["Ward", "David S."]}, {"directors": ["David S. Ward"]})
 
 
 def test_genres():

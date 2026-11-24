@@ -102,7 +102,11 @@ def load_amazon(root):
     fields = {"rate": "rate", "genre": "genres", "director": "directors", "actors": "actors"}
     item_features, vocab_sizes = {}, {}
     for field, key in fields.items():
-        rows = [[item[key]] if field == "rate" else item[key] for item in items]
+        # at most 3 directors and 5 actors, the first billed, about as many as MovieLens lists
+        rows = [
+            [item[key]] if field == "rate" else item[key][: 3 if field == "director" else 5]
+            for item in items
+        ]
         vocab = {v: i for i, v in enumerate(sorted({v for row in rows for v in row if v}), start=1)}
         vocab_sizes[field] = len(vocab) + 1
         if field == "rate":
