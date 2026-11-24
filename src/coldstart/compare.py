@@ -1,4 +1,5 @@
 import argparse
+import json
 
 import numpy as np
 import torch
@@ -35,6 +36,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("checkpoints", nargs="+", help="one checkpoint per seed")
     parser.add_argument("--against", nargs="+", required=True, help="checkpoints to compare with")
+    parser.add_argument("--json", help="also save the numbers to this file")
     args = parser.parse_args(argv)
     args.checkpoints, args.against = expand(args.checkpoints), expand(args.against)
     # users are paired only if both sides use the same seeds, hence the same query sets
@@ -47,6 +49,7 @@ def main(argv=None):
 
     errors, against = user_errors(args.checkpoints), user_errors(args.against)
     print(f"{'':<16}{'model':>8}{'against':>9}{'p':>10}{'user mean':>11}{'p':>10}")
+    rows = {}
     for state in TEST_STATES:
         model, mean = errors[state]
         other = against[state][0]
@@ -57,6 +60,11 @@ def main(argv=None):
             f"{state:<16}{model.mean():>8.4f}{other.mean():>9.4f}{p_other:>10.2g}"
             f"{mean.mean():>11.4f}{p_mean:>10.2g}"
         )
+        rows[state] = {"model": model.mean(), "against": other.mean(), "p": p_other}
+        rows[state] |= {"user mean": mean.mean(), "p user mean": p_mean}
+    if args.json:
+        with open(args.json, "w") as f:
+            json.dump(rows, f, indent=1)
 
 
 if __name__ == "__main__":

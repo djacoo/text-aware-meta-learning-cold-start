@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pytest
 import torch
@@ -13,6 +15,7 @@ from coldstart.evaluate import (
     text_knn,
     user_mean,
 )
+from coldstart.evaluate import main as evaluate_main
 from coldstart.preprocess import load_data, load_tasks
 from coldstart.train import main as train_main
 from coldstart.train import train
@@ -38,6 +41,11 @@ def test_train_then_evaluate(ml_root, tmp_path, text):
     assert saved_cfg == cfg
     assert seed == 0
     assert not model.training
+
+    out = tmp_path / "evaluate.json"
+    evaluate_main([str(tmp_path / "checkpoints" / "melu_seed0.pt"), "--json", str(out)])
+    saved = json.loads(out.read_text())
+    assert len(saved["model"]["user_cold"]["mae"]) == 1 and "user mean" in saved
 
     scores = evaluate(model, load_tasks(data, "user_cold", seed), steps=1, lr=0.01)
     assert scores["mae"] >= 0
@@ -66,8 +74,16 @@ def test_compare(ml_root, data, tmp_path, capsys):
     assert model_errors.shape == mean_errors.shape == (len(load_tasks(data, "user_cold", 0)),)
 
     capsys.readouterr()
-    compare.main(paths + ["--against", str(tmp_path / "b" / "melu_seed0.pt")])
+    out = tmp_path / "compare.json"
+    compare.main(paths + ["--against", str(tmp_path / "b" / "melu_seed0.pt"), "--json", str(out)])
     assert len(capsys.readouterr().out.splitlines()) == 5
+    assert set(json.loads(out.read_text())["item_cold"]) == {
+        "model",
+        "against",
+        "p",
+        "user mean",
+        "p user mean",
+    }
 
     # patterns work as on Windows, where the shell does not expand them
     compare.main([str(tmp_path / "a" / "melu_seed*.pt"), "--against", str(tmp_path / "b" / "*.pt")])

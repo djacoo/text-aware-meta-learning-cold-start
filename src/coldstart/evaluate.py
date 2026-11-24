@@ -1,5 +1,6 @@
 import argparse
 import glob
+import json
 from functools import partial
 
 import numpy as np
@@ -125,6 +126,7 @@ def expand(paths):
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("checkpoints", nargs="+", help="one checkpoint per seed")
+    parser.add_argument("--json", help="also save the numbers to this file")
     args = parser.parse_args(argv)
     args.checkpoints = expand(args.checkpoints)
 
@@ -161,6 +163,10 @@ def main(argv=None):
             values = results[method][state].values()
             row = "".join(f"{np.mean(v):>10.4f} ± {np.std(v):.4f}" for v in values)
             print(f"{state:<16}{row}")
+    if args.json:
+        # every method, state and metric, one value per seed
+        with open(args.json, "w") as f:
+            json.dump(results, f, indent=1)
 
 
 if __name__ == "__main__":

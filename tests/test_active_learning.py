@@ -1,3 +1,4 @@
+import json
 import random
 
 import numpy as np
@@ -88,7 +89,10 @@ def test_run_active_learning(ml_root, tmp_path, capsys):
         paths.append(str(tmp_path / str(seed) / f"melu_seed{seed}.pt"))
 
     capsys.readouterr()
-    run_main(paths + ["--states", "user_cold", "--k", "1", "2"])
+    out = tmp_path / "al.json"
+    run_main(paths + ["--states", "user_cold", "--k", "1", "2", "--json", str(out)])
+    saved = json.loads(out.read_text())["user_cold"]
+    assert set(saved) == {"1", "2"} and len(saved["1"]) == 5
     lines = [line for line in capsys.readouterr().out.split("\n") if line.strip()]
     # header, then one line per strategy and k
     assert len(lines) == 1 + 5 * 2

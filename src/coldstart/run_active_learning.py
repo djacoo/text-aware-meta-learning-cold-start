@@ -1,4 +1,5 @@
 import argparse
+import json
 import random
 
 import numpy as np
@@ -48,6 +49,7 @@ def main(argv=None):
     parser.add_argument("checkpoints", nargs="+", help="one checkpoint per seed")
     parser.add_argument("--states", nargs="+", default=TEST_STATES)
     parser.add_argument("--k", nargs="+", type=int, default=[1, 3, 5, 10])
+    parser.add_argument("--json", help="also save the numbers to this file")
     args = parser.parse_args(argv)
     args.checkpoints = expand(args.checkpoints)
 
@@ -59,6 +61,7 @@ def main(argv=None):
     ensemble_models = [model for model, _, _ in runs]
     rating_freqs = compute_rating_frequencies(load_tasks(data, "warm_train", runs[0][2]))
 
+    rows = {}
     for state in args.states:
         print(f"\n{state:<16}{'k':>3}{'mae':>8}{'ndcg@3':>8}{'p':>10}{'choose':>8}")
         for k_items in args.k:
@@ -111,6 +114,11 @@ def main(argv=None):
                 print(
                     f"{name:<16}{k_items:>3}{mae[name].mean():>8.4f}{ndcg:>8.4f}{p:>10.2g}{choose:>8.2f}"
                 )
+                row = {"mae": mae[name].mean(), "ndcg@3": ndcg, "p": p, "choose": choose}
+                rows.setdefault(state, {}).setdefault(str(k_items), {})[name] = row
+    if args.json:
+        with open(args.json, "w") as f:
+            json.dump(rows, f, indent=1)
 
 
 if __name__ == "__main__":
