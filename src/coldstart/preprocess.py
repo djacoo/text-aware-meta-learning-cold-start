@@ -5,6 +5,7 @@ from pathlib import Path
 
 import torch
 
+from coldstart.amazon import build_amazon
 from coldstart.amazon import describe as describe_amazon
 from coldstart.dataset import RatingData, Task
 from coldstart.download import download_movielens_1m
@@ -20,7 +21,6 @@ VOCAB_FILES = {
     "occupation": "m_occupation.txt",
     "zip": "m_zipcode.txt",
 }
-STATES = ("warm_train", "warm_val", "warm_test", "user_cold", "item_cold", "user_item_cold")
 STATE_FILES = {
     "user_cold": "user_cold_state",
     "item_cold": "item_cold_state",
@@ -96,7 +96,9 @@ def extract_user_features(root, vocab):
 
 
 def load_amazon(root):
-    # files written by coldstart.amazon, items keep their order and users have no profile
+    # built once by coldstart.amazon, items keep their order and users have no profile
+    if not (root / "items.json").exists():
+        build_amazon(root)
     saved = json.loads((root / "items.json").read_text())
     items = saved["items"]
     fields = {"rate": "rate", "genre": "genres", "director": "directors", "actors": "actors"}
@@ -134,9 +136,9 @@ def load_movielens(root):
 
 
 def load_data(root="data/ml-1m", text_encoder=None, text_source="plot"):
+    # the folder name picks the dataset
     root = Path(root)
-    amazon = (root / "items.json").exists()
-    data = load_amazon(root) if amazon else load_movielens(root)
+    data = load_amazon(root) if root.name == "amazon" else load_movielens(root)
     if text_encoder:
         # "plot" encodes the plot alone, "full" the whole description
         texts, name = {"plot": (data.plots, "plots"), "full": (data.descriptions, "full")}[

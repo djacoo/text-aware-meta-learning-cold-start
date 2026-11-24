@@ -1,6 +1,6 @@
 import json
 
-from coldstart.amazon import build_amazon, genres, same_film, title_key
+from coldstart.amazon import genres, same_film, title_key
 from coldstart.preprocess import load_data, load_tasks
 
 
@@ -68,9 +68,17 @@ def test_genres():
 
 
 def test_build_and_load_amazon(tmp_path):
-    write_raw(tmp_path)
-    build_amazon(tmp_path, n_items=100)
-    items = json.loads((tmp_path / "items.json").read_text())["items"]
+    # the folder name picks Amazon, and a folder without items.json is built on first use
+    root = tmp_path / "amazon"
+    write_raw(root)
+    data = load_data(root)
+    assert data.user_features == {}
+    assert data.item_features["genre"].shape[0] == 30
+    assert data.descriptions[0].startswith("Film 0. Drama. Directed by Ann Lee, Bo Ray.")
+    tasks = load_tasks(data, "warm_train", seed=0)
+    assert tasks and all(len(task.query_items) == 10 for task in tasks)
+
+    items = json.loads((root / "items.json").read_text())["items"]
     asins = [item["asin"] for item in items]
     # the Blu-ray copy of Film 0 and the item without description are gone
     assert sorted(asins) == sorted(f"F{i}" for i in range(30))
@@ -80,15 +88,8 @@ def test_build_and_load_amazon(tmp_path):
 
     states = {}
     for name in ("warm_state", "user_cold_state", "item_cold_state", "user_and_item_cold_state"):
-        states[name] = json.loads((tmp_path / f"{name}.json").read_text())
+        states[name] = json.loads((root / f"{name}.json").read_text())
     new_items = {i for movies in states["item_cold_state"].values() for i in movies}
     assert {asins[i] for i in new_items} == {f"F{i}" for i in range(18, 30)}
     assert len(states["user_cold_state"]) == 6
     assert not set(states["warm_state"]) & set(states["user_cold_state"])
-
-    data = load_data(tmp_path)
-    assert data.user_features == {}
-    assert data.item_features["genre"].shape[0] == 30
-    assert data.descriptions[0].startswith("Film 0. Drama. Directed by Ann Lee, Bo Ray.")
-    tasks = load_tasks(data, "warm_train", seed=0)
-    assert tasks and all(len(task.query_items) == 10 for task in tasks)
