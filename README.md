@@ -31,7 +31,7 @@ python -m coldstart.compare checkpoints/text_full/melu_seed*.pt --against checkp
 
 `compare` runs a paired Wilcoxon test over test users. Any config value can be changed with `--set`, for example `--set text_encoder=random` for the control with random vectors, or `--set text_encoder=Qwen/Qwen3-Embedding-0.6B` for another encoder.
 
-The text-based user initialization averages the texts of the movies a user liked and disliked in the support set, and from them shifts the output layer before adaptation, as in Proto-MAML. It starts from zero, so at the beginning of training the model is plain MeLU:
+The text-based user initialization averages the texts of the movies a user liked and disliked in the support set, and from them shifts the output layer before adaptation, an initialization inspired by Proto-MAML. It starts from zero, so at the beginning of training the model is plain MeLU:
 
 ```bash
 python -m coldstart.train --config configs/proto_melu.yaml --seed 0 --out checkpoints/proto
@@ -48,7 +48,7 @@ python -m coldstart.run_active_learning checkpoints/tuned/melu_seed*.pt
 
 It prints MAE and nDCG@3 for each state and k, with a paired Wilcoxon test against random choices.
 
-The second dataset is Movies & TV from Amazon Reviews 2023. This downloads the ratings and the item metadata (about 1.7 GB) to `data/amazon/` and builds the four states as MeLU does: items need a title and a description, editions of the same film are merged, the 5000 most rated are kept, the last 40% to appear are the new items and a random 20% of the users are the new users. Amazon has no user profile, so users are only modelled by adaptation:
+The second dataset is Movies & TV from Amazon Reviews 2023. The first run on `data/amazon/` downloads the ratings and the item metadata (about 1.7 GB) and builds the four states as MeLU does: items need a title and a description, editions of the same film are reduced to the most rated one, the 5000 most rated films are kept, the last 40% to appear are the new items and a random 20% of the users are the new users. Amazon has no user profile, so users are only modelled by adaptation:
 
 ```bash
 python -m coldstart.amazon
