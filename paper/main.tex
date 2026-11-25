@@ -67,6 +67,36 @@ Zhang, W., Bei, Y., Yang, L., Zou, H. P., Zhou, P., Liu, A., Li, Y., Chen, H., W
 
 \subsection{MeLU}
 \label{sec:melu}
+MeLU~\cite{lee2019melu} faces the cold-start problem as an optimization-based meta-learning problem, which is built upon MAML. Here each user $i$ corresponds to an individual learning task $\mathcal{T}_i$, and its interaction history is separated into a \emph{support set} $\mathcal{S}_i$ used for local personalization and a \emph{query set} $\mathcal{Q}_i$ which serves as a tool for evaluating generalization and compute global meta-updates.
+
+\paragraph{User Preference Estimator.}
+Given a user $i$ with $P$ categorical attributes and an item $j$ with $Q$ categorical attributes, MeLU first maps each one-hot feature vector $c_{ip}$ and $c_{jq}$ into dense $d_e$-dimensional embeddings by concatenating learned embedding matrices $E_{ip}$ and $E_{jq}$ into user and item representations:
+\begin{equation}
+    U_i = [E_{i1}c_{i1}; \dots; E_{iP}c_{iP}]^\top, \qquad
+    I_j = [E_{j1}c_{j1}; \dots; E_{jQ}c_{jQ}]^\top.
+\end{equation}
+We denote the set of all user and item embedding parameters as $\theta_1$. The concatenated representation $x_0 = [U_i; I_j]$ is fed into an $N$-layer fully-connected decision-making network followed by a linear output layer to predict the explicit rating $\hat{y}_{ij}$:
+\begin{equation}
+    x_n = \mathrm{ReLU}(W_n^\top x_{n-1} + b_n), \qquad
+    \hat{y}_{ij} = W_o^\top x_N + b_o,
+\end{equation}
+for $n \in \{1, \dots, N\}$. We denote the decision-making and output layer parameters as $\theta_2 = \{W_1, b_1, \dots, W_N, b_N, W_o, b_o\}$.
+
+\paragraph{Bi-Level Meta-Optimization.}
+In order to adapt a user’s specific tastes, the strategy MeLU exploits to accomplish its goal and to avoid overfitting on scarce interactions is to decouple parameter updates into a local inner loop and a global outer one. During the \emph{local update}, stable entity representations are preserved by keeping the embedding parameters $\theta_1$ frozen, while only the decision-making parameters $\theta_2$ are adapted on the user's support set $\mathcal{S}_i$ by minimizing the Mean Squared Error (MSE):
+\begin{equation}
+    \mathcal{L}_{\mathcal{S}_i}(\theta_1, \theta_2) = \frac{1}{|\mathcal{S}_i|} \sum_{j \in \mathcal{S}_i} (y_{ij} - \hat{y}_{ij})^2,
+\end{equation}
+yielding user-specific parameters $\theta_2^{(i)}$ after one or more gradient steps with inner learning rate $\alpha$:
+\begin{equation}
+    \theta_2^{(i)} \leftarrow \theta_2 - \alpha \nabla_{\theta_2} \mathcal{L}_{\mathcal{S}_i}(\theta_1, \theta_2).
+\end{equation}
+Instead, during the \emph{global update}, the meta-learner evaluates the adapted parameters $\theta_2^{(i)}$ on the query set $\mathcal{Q}_i$ across a mini-batch of users $\mathcal{B}$, updating both $\theta_1$ and $\theta_2$ with outer learning rate $\beta$:
+\begin{equation}
+    \theta_1 \leftarrow \theta_1 - \beta \sum_{i \in \mathcal{B}} \nabla_{\theta_1} \mathcal{L}_{\mathcal{Q}_i}(\theta_1, \theta_2^{(i)}), \qquad
+    \theta_2 \leftarrow \theta_2 - \beta \sum_{i \in \mathcal{B}} \nabla_{\theta_2} \mathcal{L}_{\mathcal{Q}_i}(\theta_1, \theta_2^{(i)}).
+\end{equation}
+At inference time, a cold user's preferences are estimated by adapting $\theta_2$ on their available support interactions $\mathcal{S}_i$ and predicting ratings for unseen items. We highlight that the original MeLU framework also implemented a heuristic evidence candidate selection rule based on global gradient norms and item popularity, but it assumes passive support sets during standard evaluation too.~\cite{lee2019melu}—a limitation we directly address in Section~\ref{sec:active_learning}.
 
 \subsection{Item text}
 \label{sec:method_text}
