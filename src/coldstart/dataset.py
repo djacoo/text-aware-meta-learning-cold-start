@@ -14,7 +14,7 @@ class Task:
 
 
 @dataclass
-class MovieLens:
+class RatingData:
     root: Path
     item_features: dict[str, Tensor]
     user_features: dict[str, Tensor]

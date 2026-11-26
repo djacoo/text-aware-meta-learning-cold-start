@@ -6,133 +6,60 @@ import torch.nn.functional as F
 from coldstart.model import predict, start_params
 
 
-def compute_rating_frequencies(tasks):
-    """
-    Computes the share of each rating value in a list of tasks.
-    """
-    all_ratings = []
-    for task in tasks:
-        all_ratings.append(task.support_ratings)
-        all_ratings.append(task.query_ratings)
-
-    all_ratings = torch.cat(all_ratings)
-    unique_vals, counts = torch.unique(all_ratings, return_counts=True)
-
-    total = all_ratings.size(0)
-    # Map each unique rating to its frequency
-    return {u.item(): c.item() / total for u, c in zip(unique_vals, counts, strict=True)}
+def rating_frequencies(tasks):
+    # how often each rating value is given, used to weight the unknown rating of a candidate
+    ratings = torch.cat([torch.cat([t.support_ratings, t.query_ratings]) for t in tasks])
+    values, counts = torch.unique(ratings, return_counts=True)
+    return {v.item(): c.item() / len(ratings) for v, c in zip(values, counts, strict=True)}
 
 
-def select_random(all_items, k, **kwargs):
-    """
-    Baseline strategy: selects k items at random.
-    """
-    n = all_items.size(0)
-    if k >= n:
-        return torch.arange(n)
-    return torch.randperm(n)[:k]
+def select_random(items, k, **kwargs):
+    return torch.randperm(len(items))[:k]
 
 
-def select_ensemble_uncertainty(c_items, k, ensemble_models, user_id, data=None, **kwargs):
-    """
-    Selects k items where the variance among 5 trained models is the highest.
-    """
-    n = c_items.size(0)
-    if k >= n:
-        return torch.arange(n)
-
-    device = next(ensemble_models[0].parameters()).device
-    items_t = c_items.to(device)
-    users_t = torch.full_like(items_t, user_id).to(device)
-
-    preds = []
+def select_uncertainty(items, k, ensemble, user, **kwargs):
+    # disagreement between the models trained with different seeds, before any rating
+    users = torch.full_like(items, user)
     with torch.no_grad():
-        for model in ensemble_models:
-            model.eval()
-            params = start_params(model, data)
-            preds.append(predict(model, params, users_t, items_t))
-
-    preds_tensor = torch.stack(preds)
-    variance = torch.var(preds_tensor, dim=0)
-
-    top_k_indices = torch.argsort(variance, descending=True)[:k]
-    return top_k_indices.cpu()
+        preds = torch.stack([predict(m, start_params(m), users, items) for m in ensemble])
+    return torch.argsort(torch.var(preds, dim=0), descending=True)[:k]
 
 
-def select_expected_model_change(c_items, k, melu_model, user_id, data=None, **kwargs):
-    """
-    Calculates the Expected Gradient Length (EGL) for each candidate.
-    """
-    n = c_items.size(0)
-    if k >= n:
-        return torch.arange(n)
-
-    rating_freqs = kwargs.get("rating_freqs")
-    if rating_freqs is None:
-        raise ValueError("Expected Model Change requires 'rating_freqs' kwargs.")
-
-    device = next(melu_model.parameters()).device
-    params = start_params(melu_model, data)
-    local_params = [params[name] for name in melu_model.local_params]
-
-    emc_scores = []
-
-    for i in range(n):
-        item = c_items[i : i + 1].to(device)
-        user = torch.full((1,), user_id, dtype=torch.long, device=device)
-
-        pred = predict(melu_model, params, user, item)
-        grads = torch.autograd.grad(pred, local_params, retain_graph=False)
-        grad_norm = torch.sqrt(sum(torch.norm(g) ** 2 for g in grads)).item()
-
-        expected_norm = 0.0
-        for y_val, prob in rating_freqs.items():
-            scaling_factor = 2.0 * abs(pred.item() - y_val)
-            expected_norm += prob * (scaling_factor * grad_norm)
-
-        emc_scores.append(expected_norm)
-
-    emc_tensor = torch.tensor(emc_scores)
-    top_k_indices = torch.argsort(emc_tensor, descending=True)[:k]
-    return top_k_indices.cpu()
+def select_expected_model_change(items, k, model, user, rating_freqs, **kwargs):
+    # expected gradient length: for a rating y the squared error has gradient 2 |f - y| grad f,
+    # averaged over how often each rating is given
+    params = start_params(model)
+    local = [params[name] for name in model.local_params]
+    scores = []
+    for item in items:
+        pred = predict(model, params, torch.tensor([user]), item[None])
+        grads = torch.autograd.grad(pred, local)
+        norm = torch.sqrt(sum(torch.norm(g) ** 2 for g in grads)).item()
+        scores.append(sum(p * (2.0 * abs(pred.item() - y) * norm) for y, p in rating_freqs.items()))
+    return torch.argsort(torch.tensor(scores), descending=True)[:k]
 
 
-def select_text_diversity(all_items, k, text_embeddings, **kwargs):
-    """
-    Selects k items maximizing semantic diversity using a Greedy Max-Min distance approach.
-    """
-    n = all_items.size(0)
-    if k >= n:
-        return torch.arange(n)
+def select_hybrid(items, k, **kwargs):
+    # expected model change for the first item, the others at random
+    first = select_expected_model_change(items, 1, **kwargs).item()
+    rest = [i for i in torch.randperm(len(items)).tolist() if i != first][: k - 1]
+    return torch.tensor([first, *rest])
 
-    if text_embeddings is None:
-        raise ValueError("Text embeddings are missing. Load MovieLens with text_encoder!")
 
-    candidates_emb = text_embeddings[all_items]
-    has_text = candidates_emb.norm(dim=1) > 0
-
-    selected_idx = [random.randint(0, n - 1)]
-    unselected_idx = list(range(n))
-    unselected_idx.remove(selected_idx[0])
-
+def select_text_diversity(items, k, text_embeddings, **kwargs):
+    # greedy max-min cosine distance, starting from a random item
+    vectors = text_embeddings[items]
+    has_text = vectors.norm(dim=1) > 0
+    selected = [random.randint(0, len(items) - 1)]
+    remaining = [i for i in range(len(items)) if i != selected[0]]
     for _ in range(1, k):
-        max_min_dist = -1.0
-        best_candidate = -1
-        sel_tensor = candidates_emb[selected_idx]
-
-        for cand in unselected_idx:
-            cand_tensor = candidates_emb[cand].unsqueeze(0)
-
-            # Cosine distance
-            sims = F.cosine_similarity(cand_tensor, sel_tensor)
+        best, best_distance = -1, -1.0
+        for i in remaining:
+            sims = F.cosine_similarity(vectors[i][None], vectors[selected])
             # a film without text has a zero vector, which would look farthest from everything
-            min_dist = torch.min(1.0 - sims).item() if has_text[cand] else 0.0
-
-            if min_dist > max_min_dist:
-                max_min_dist = min_dist
-                best_candidate = cand
-
-        selected_idx.append(best_candidate)
-        unselected_idx.remove(best_candidate)
-
-    return torch.tensor(selected_idx)
+            distance = torch.min(1.0 - sims).item() if has_text[i] else 0.0
+            if distance > best_distance:
+                best, best_distance = i, distance
+        selected.append(best)
+        remaining.remove(best)
+    return torch.tensor(selected)

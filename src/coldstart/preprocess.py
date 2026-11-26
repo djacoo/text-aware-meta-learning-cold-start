@@ -5,7 +5,9 @@ from pathlib import Path
 
 import torch
 
-from coldstart.dataset import MovieLens, Task
+from coldstart.amazon import build_amazon
+from coldstart.amazon import describe as describe_amazon
+from coldstart.dataset import RatingData, Task
 from coldstart.download import download_movielens_1m
 from coldstart.text import load_text_embeddings
 
@@ -19,7 +21,6 @@ VOCAB_FILES = {
     "occupation": "m_occupation.txt",
     "zip": "m_zipcode.txt",
 }
-STATES = ("warm_train", "warm_val", "warm_test", "user_cold", "item_cold", "user_item_cold")
 STATE_FILES = {
     "user_cold": "user_cold_state",
     "item_cold": "item_cold_state",
@@ -94,19 +95,55 @@ def extract_user_features(root, vocab):
     return features, user_index
 
 
-def load_movielens(root="data/ml-1m", text_encoder=None, text_source="plot"):
-    root = Path(root)
+def load_amazon(root):
+    # built once by coldstart.amazon, items keep their order and users have no profile
+    if not (root / "items.json").exists():
+        build_amazon(root)
+    saved = json.loads((root / "items.json").read_text())
+    items = saved["items"]
+    fields = {"rate": "rate", "genre": "genres", "director": "directors", "actors": "actors"}
+    item_features, vocab_sizes = {}, {}
+    for field, key in fields.items():
+        # at most 3 directors and 5 actors, the first billed, about as many as MovieLens lists
+        rows = [
+            [item[key]] if field == "rate" else item[key][: 3 if field == "director" else 5]
+            for item in items
+        ]
+        vocab = {v: i for i, v in enumerate(sorted({v for row in rows for v in row if v}), start=1)}
+        vocab_sizes[field] = len(vocab) + 1
+        if field == "rate":
+            item_features[field] = torch.tensor([vocab.get(row[0], 0) for row in rows])
+        else:
+            item_features[field] = pad([[vocab[v] for v in row] or [0] for row in rows])
+    item_index = {i: i for i in range(len(items))}
+    user_index = {u: u for u in range(saved["n_users"])}
+    plots = [item["description"] for item in items]
+    descriptions = [describe_amazon(item) for item in items]
+    return RatingData(
+        root, item_features, {}, vocab_sizes, item_index, user_index, plots, descriptions
+    )
+
+
+def load_movielens(root):
     download_movielens_1m(root)
     vocab = {field: load_vocab(root / name) for field, name in VOCAB_FILES.items()}
     item_features, item_index, plots, descriptions = extract_item_features(root, vocab)
     user_features, user_index = extract_user_features(root, vocab)
     vocab_sizes = {field: len(values) + 1 for field, values in vocab.items()}
-    data = MovieLens(
+    return RatingData(
         root, item_features, user_features, vocab_sizes, item_index, user_index, plots, descriptions
     )
+
+
+def load_data(root="data/ml-1m", text_encoder=None, text_source="plot"):
+    # the folder name picks the dataset
+    root = Path(root)
+    data = load_amazon(root) if root.name == "amazon" else load_movielens(root)
     if text_encoder:
         # "plot" encodes the plot alone, "full" the whole description
-        texts, name = {"plot": (plots, "plots"), "full": (descriptions, "full")}[text_source]
+        texts, name = {"plot": (data.plots, "plots"), "full": (data.descriptions, "full")}[
+            text_source
+        ]
         data.text_embeddings = load_text_embeddings(root, texts, text_encoder, name)
     return data
 

@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pytest
 import torch
@@ -5,15 +7,16 @@ import torch
 from coldstart import compare
 from coldstart.dataset import Task
 from coldstart.evaluate import (
-    evaluate,
     expand,
     load_model,
     melu_predictor,
+    score,
     task_scores,
     text_knn,
     user_mean,
 )
-from coldstart.preprocess import load_movielens, load_tasks
+from coldstart.evaluate import main as evaluate_main
+from coldstart.preprocess import load_data, load_tasks
 from coldstart.train import main as train_main
 from coldstart.train import train
 
@@ -33,13 +36,18 @@ def test_train_then_evaluate(ml_root, tmp_path, text):
     } | text
     train(cfg, seed=0, out_dir=tmp_path / "checkpoints")
 
-    data = load_movielens(ml_root, cfg.get("text_encoder"))
+    data = load_data(ml_root, cfg.get("text_encoder"))
     model, saved_cfg, seed = load_model(tmp_path / "checkpoints" / "melu_seed0.pt", data)
     assert saved_cfg == cfg
     assert seed == 0
     assert not model.training
 
-    scores = evaluate(model, load_tasks(data, "user_cold", seed), steps=1, lr=0.01)
+    out = tmp_path / "evaluate.json"
+    evaluate_main([str(tmp_path / "checkpoints" / "melu_seed0.pt"), "--json", str(out)])
+    saved = json.loads(out.read_text())
+    assert len(saved["model"]["user_cold"]["mae"]) == 1 and "user mean" in saved
+
+    scores = score(load_tasks(data, "user_cold", seed), melu_predictor(model, 1, 0.01))
     assert scores["mae"] >= 0
     assert 0 <= scores["ndcg@1"] <= 1
     assert 0 <= scores["ndcg@3"] <= 1
@@ -66,8 +74,16 @@ def test_compare(ml_root, data, tmp_path, capsys):
     assert model_errors.shape == mean_errors.shape == (len(load_tasks(data, "user_cold", 0)),)
 
     capsys.readouterr()
-    compare.main(paths + ["--against", str(tmp_path / "b" / "melu_seed0.pt")])
+    out = tmp_path / "compare.json"
+    compare.main(paths + ["--against", str(tmp_path / "b" / "melu_seed0.pt"), "--json", str(out)])
     assert len(capsys.readouterr().out.splitlines()) == 5
+    assert set(json.loads(out.read_text())["item_cold"]) == {
+        "model",
+        "against",
+        "p",
+        "user mean",
+        "p user mean",
+    }
 
     # patterns work as on Windows, where the shell does not expand them
     compare.main([str(tmp_path / "a" / "melu_seed*.pt"), "--against", str(tmp_path / "b" / "*.pt")])
@@ -123,10 +139,10 @@ def test_compare_uses_prototype(ml_root, tmp_path):
     train(cfg, seed=0, out_dir=tmp_path)
     path = str(tmp_path / "proto_melu_seed0.pt")
 
-    data = load_movielens(ml_root, cfg["text_encoder"])
+    data = load_data(ml_root, cfg["text_encoder"])
     model, _, _ = load_model(path, data)
     tasks = load_tasks(data, "user_cold", 0)
-    expected = task_scores(tasks, melu_predictor(model, 1, 0.01, data=data))["mae"]
+    expected = task_scores(tasks, melu_predictor(model, 1, 0.01))["mae"]
     assert np.allclose(compare.user_errors([path])["user_cold"][0], expected)
 
 
@@ -135,3 +151,21 @@ def test_expand_patterns(tmp_path):
         (tmp_path / name).touch()
     paths = expand([str(tmp_path / "melu_seed*.pt"), "missing.pt"])
     assert paths == [str(tmp_path / "melu_seed0.pt"), str(tmp_path / "melu_seed1.pt"), "missing.pt"]
+
+
+def test_same_seed_same_model(ml_root, tmp_path):
+    cfg = {
+        "data_root": str(ml_root),
+        "emb_dim": 8,
+        "hidden": 16,
+        "inner_lr": 0.01,
+        "outer_lr": 0.01,
+        "inner_steps": 1,
+        "meta_batch": 4,
+        "epochs": 2,
+        "id_dropout": 0.5,
+    }
+    for run in ("a", "b"):
+        train(cfg, seed=0, out_dir=tmp_path / run)
+    a, b = (torch.load(tmp_path / run / "melu_seed0.pt")["state"] for run in ("a", "b"))
+    assert all(torch.equal(a[name], b[name]) for name in a)

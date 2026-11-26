@@ -1,0 +1,8 @@
+# Prototypical Networks on the item fields, same sizes and outer learning rate as tuned MeLU
+data_root: data/ml-1m
+emb_dim: 32
+hidden: 64
+outer_lr: 1.0e-3
+meta_batch: 32
+epochs: 30
+model: protonet

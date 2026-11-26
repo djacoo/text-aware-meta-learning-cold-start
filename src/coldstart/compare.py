@@ -1,4 +1,5 @@
 import argparse
+import json
 
 import numpy as np
 import torch
@@ -8,33 +9,37 @@ from coldstart.evaluate import (
     TEST_STATES,
     expand,
     load_model,
-    melu_predictor,
+    predictor,
     task_scores,
     user_mean,
 )
-from coldstart.preprocess import load_movielens, load_tasks
+from coldstart.preprocess import load_data, load_tasks
 
 
 def user_errors(paths):
     # MAE of each test user per state, averaged over seeds (the users are the same in every seed)
     cfg = torch.load(paths[0], map_location="cpu")["config"]
-    data = load_movielens(cfg["data_root"], cfg.get("text_encoder"), cfg.get("text_source", "plot"))
-    melu = {state: [] for state in TEST_STATES}
-    mean = {state: [] for state in TEST_STATES}
+    data = load_data(cfg["data_root"], cfg.get("text_encoder"), cfg.get("text_source", "plot"))
+    model_errors = {state: [] for state in TEST_STATES}
+    mean_errors = {state: [] for state in TEST_STATES}
     for path in paths:
         model, cfg, seed = load_model(path, data)
-        predictor = melu_predictor(model, cfg["inner_steps"], cfg["inner_lr"], data=data)
+        predict = predictor(model, cfg)
         for state in TEST_STATES:
             tasks = load_tasks(data, state, seed)
-            melu[state].append(task_scores(tasks, predictor)["mae"])
-            mean[state].append(task_scores(tasks, user_mean)["mae"])
-    return {state: (np.mean(melu[state], axis=0), np.mean(mean[state], axis=0)) for state in melu}
+            model_errors[state].append(task_scores(tasks, predict)["mae"])
+            mean_errors[state].append(task_scores(tasks, user_mean)["mae"])
+    return {
+        state: (np.mean(model_errors[state], axis=0), np.mean(mean_errors[state], axis=0))
+        for state in TEST_STATES
+    }
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("checkpoints", nargs="+", help="one checkpoint per seed")
     parser.add_argument("--against", nargs="+", required=True, help="checkpoints to compare with")
+    parser.add_argument("--json", help="also save the numbers to this file")
     args = parser.parse_args(argv)
     args.checkpoints, args.against = expand(args.checkpoints), expand(args.against)
     # users are paired only if both sides use the same seeds, hence the same query sets
@@ -47,6 +52,7 @@ def main(argv=None):
 
     errors, against = user_errors(args.checkpoints), user_errors(args.against)
     print(f"{'':<16}{'model':>8}{'against':>9}{'p':>10}{'user mean':>11}{'p':>10}")
+    rows = {}
     for state in TEST_STATES:
         model, mean = errors[state]
         other = against[state][0]
@@ -57,6 +63,11 @@ def main(argv=None):
             f"{state:<16}{model.mean():>8.4f}{other.mean():>9.4f}{p_other:>10.2g}"
             f"{mean.mean():>11.4f}{p_mean:>10.2g}"
         )
+        rows[state] = {"model": model.mean(), "against": other.mean(), "p": p_other}
+        rows[state] |= {"user mean": mean.mean(), "p user mean": p_mean}
+    if args.json:
+        with open(args.json, "w") as f:
+            json.dump(rows, f, indent=1)
 
 
 if __name__ == "__main__":
