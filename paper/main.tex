@@ -96,7 +96,7 @@ Instead, during the \emph{global update}, the meta-learner evaluates the adapted
     \theta_1 \leftarrow \theta_1 - \beta \sum_{i \in \mathcal{B}} \nabla_{\theta_1} \mathcal{L}_{\mathcal{Q}_i}(\theta_1, \theta_2^{(i)}), \qquad
     \theta_2 \leftarrow \theta_2 - \beta \sum_{i \in \mathcal{B}} \nabla_{\theta_2} \mathcal{L}_{\mathcal{Q}_i}(\theta_1, \theta_2^{(i)}).
 \end{equation}
-At inference time, a cold user's preferences are estimated by adapting $\theta_2$ on their available support interactions $\mathcal{S}_i$ and predicting ratings for unseen items. We highlight that the original MeLU framework also implemented a heuristic evidence candidate selection rule based on global gradient norms and item popularity, but it assumes passive support sets during standard evaluation too.~\cite{lee2019melu}—a limitation we directly address in Section~\ref{sec:active_learning}.
+At inference time, a cold user's preferences are estimated by adapting $\theta_2$ on their available support interactions $\mathcal{S}_i$ and predicting ratings for unseen items. We highlight that the original MeLU framework also implemented a heuristic evidence candidate selection rule based on global gradient norms and item popularity, but it assumes passive support sets during standard evaluation too.~\cite{lee2019melu}—a limitation we directly address in Section~\ref{sec:method_al}.
 
 \subsection{Item text}
 \label{sec:method_text}
@@ -106,6 +106,35 @@ At inference time, a cold user's preferences are estimated by adapting $\theta_2
 
 \subsection{Active learning}
 \label{sec:method_al}
+
+Since standard meta-learning’s way to handle new users is by supposing that their support sets $\mathcal{S}_i$ have already being observed before adaptation, we thought about implementing Active Learning (AL)~\cite{settles2009active} to minimize onboarding users' conflictual scenario by actively selecting the most informative subset of items $\mathcal{S}_i^{(k)} \subseteq \mathcal{S}_i$ for local adaptation.
+
+\paragraph{Leak-Free Fixed-Query Protocol.}
+Here another challenge arises: if candidate items were sampled from the union $\mathcal{S}_i \cup \mathcal{Q}_i$ with the remaining items forming the test set, evaluation leakage would be introduced, caused by different AL strategies evaluating on query sets of different size and difficulty. Therefore, to guarantee a strictly fair comparison, we separate candidate selection from evaluation. The workflow goes like this: for each cold-start user task $\mathcal{T}_i$, we limit the candidate pool only to the support set, $\mathcal{C}_i = \mathcal{S}_i$, while holding the query set $\mathcal{Q}_i$ fixed and disjoint across all strategies and budgets $k$. Then, if $|\mathcal{S}_i| \le k$, all available support items are held ($\mathcal{S}_i^{(k)} = \mathcal{S}_i$); otherwise, a selection policy chooses $k$ items $\mathcal{S}_i^{(k)} \subset \mathcal{S}_i$ and first-order local adaptation is then performed on $\mathcal{S}_i^{(k)}$ starting from the initial meta-learned parameters $\theta_2$, and prediction error is measured on the fixed $\mathcal{Q}_i$.
+
+\paragraph{Selection Strategies.}
+We benchmark four query selection strategies:
+
+\begin{enumerate}
+    \item \textbf{Random Sampling:} Samples $k$ items uniformly at random without replacement from $\mathcal{C}_i$. This serves as an unbiased baseline reflecting passive onboarding.
+
+    \item \textbf{Ensemble Uncertainty:} Following deep ensemble uncertainty estimation~\cite{lakshminarayanan2017simple}, we train $M = 5$ independent MeLU models $\{f_{\theta^{(m)}}\}_{m=1}^{M}$ with distinct random seeds. For each candidate $j \in \mathcal{C}_i$, we compute the predictive variance across ensemble members prior to adaptation:
+    \begin{equation}
+        u_{\mathrm{ens}}(j) = \frac{1}{M - 1} \sum_{m=1}^{M} \left(\hat{y}_{ij}^{(m)} - \bar{y}_{ij}\right)^2, \qquad \bar{y}_{ij} = \frac{1}{M}\sum_{m=1}^{M} \hat{y}_{ij}^{(m)},
+    \end{equation}
+    and select the top-$k$ items with highest variance, targeting regions of maximum model disagreement.
+
+    \item \textbf{Expected Model Change (EMC):} EMC ~\cite{settles2008multiple} selects items expected to produce the largest update on the user-specific decision-making parameters $\theta_2$ prior to adaptation. Since the true rating $y \in \mathcal{Y} = \{1, \dots, 5\}$ is unknown before querying, we take the expectation of the $L_2$ norm of the local MSE gradient over the rating prior $P(y)$ estimated from the training split:
+    \begin{equation}
+        u_{\mathrm{emc}}(j) = \sum_{y \in \mathcal{Y}} P(y) \left\| \nabla_{\theta_2} \left(\hat{y}_{ij} - y\right)^2 \right\|_2 = \sum_{y \in \mathcal{Y}} P(y) \cdot 2\left|\hat{y}_{ij} - y\right| \left\| \nabla_{\theta_2} \hat{y}_{ij} \right\|_2.
+    \end{equation}
+    Factoring out the scalar $2|\hat{y}_{ij} - y|$ via the chain rule allows computing $u_{\mathrm{emc}}(j)$ with a single backward pass per candidate item rather than $|\mathcal{Y}|$ separate passes, selecting the top-$k$ items with largest expected norm.
+
+    \item \textbf{Text Diversity:} This strategy ~\cite{sener2018active} maximizes semantic coverage of the candidate pool using dense item text embeddings $\mathbf{e}_j \in \mathbb{R}^d$ extracted from movie plots~\cite{reimers2019sbert}. Starting from an initial item drawn uniformly at random from $\mathcal{C}_i$ to form $\mathcal{S}_i^{(1)}$, we iteratively add the candidate maximizing its minimum cosine distance to the already selected set $\mathcal{S}_i^{(t)}$ ($1 \le t < k$):
+    \begin{equation}
+        j^* = \arg\max_{j \in \mathcal{C}_i \setminus \mathcal{S}_i^{(t)}} \min_{s \in \mathcal{S}_i^{(t)}} \left( 1 - \frac{\mathbf{e}_j^\top \mathbf{e}_s}{\|\mathbf{e}_j\|_2 \|\mathbf{e}_s\|_2} \right).
+    \end{equation}
+\end{enumerate}
 
 \subsection{Datasets}
 \label{sec:datasets}
